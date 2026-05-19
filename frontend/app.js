@@ -13,7 +13,13 @@ const emptyState = $("emptyState");
 function log(message) {
   const item = document.createElement("li");
   item.textContent = `${new Date().toLocaleTimeString()} ${message}`;
-  $("logs").appendChild(item);
+  
+  const container = $("logs");
+  // Prepend at the top so newest is always at the absolute top
+  container.insertBefore(item, container.firstChild);
+  
+  // Keep scrollbar pinned to the top to see the newest entry immediately
+  container.scrollTop = 0;
 }
 
 function setStatus(text, detail = "") {
@@ -33,18 +39,24 @@ async function api(path, options = {}) {
   return response.json();
 }
 
-async function fetchScreenSize(serial) {
+async function updateDeviceResolution() {
+  const serial = $("deviceSelect").value;
   if (!serial) return;
   try {
-    const data = await api(`/api/devices/${encodeURIComponent(serial)}/wm-size`);
-    const match = (data.raw || "").match(/(\d+)x(\d+)/);
+    const res = await api(`/api/devices/${encodeURIComponent(serial)}/wm-size`);
+    const match = res.raw.match(/(\d+)x(\d+)/);
     if (match) {
-      const maxDim = Math.max(Number(match[1]), Number(match[2]));
+      const w = parseInt(match[1]);
+      const h = parseInt(match[2]);
+      const maxDim = Math.max(w, h);
       $("maxSize").value = maxDim;
-      log(`screen ${match[1]}x${match[2]}, maxSize → ${maxDim}`);
+      log(`Device resolution loaded: ${w}x${h} (Max: ${maxDim}px)`);
+    } else {
+      $("maxSize").value = "1280";
     }
-  } catch {
-    // device may be offline or unauthorized, ignore
+  } catch (err) {
+    log(`Failed to fetch device resolution: ${err.message}`);
+    $("maxSize").value = "1280";
   }
 }
 
@@ -63,11 +75,9 @@ async function loadDevices() {
     state.selected = select.value || state.devices[0].serial;
     const current = state.devices.find((device) => device.serial === state.selected);
     $("deviceMeta").textContent = current?.product || current?.model || current?.state || "device";
-    if (current?.state === "device") {
-      await fetchScreenSize(state.selected);
-    }
+    await updateDeviceResolution();
   } else {
-    $("deviceMeta").textContent = "没有发现授权设备";
+    $("deviceMeta").textContent = "No authorized devices found";
   }
 }
 
@@ -86,7 +96,7 @@ function resetStream() {
 
   // Reset button state
   const btn = $("connectBtn");
-  btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg> Start Stream`;
+  btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg> Start Stream`;
   btn.disabled = false;
   btn.classList.remove("streaming-active");
 }
@@ -94,7 +104,7 @@ function resetStream() {
 function connectStream() {
   const btn = $("connectBtn");
 
-  // If we are already streaming or connecting, the button acts as STOP!
+  // If streaming is active, act as a Stop action
   if (state.ws) {
     resetStream();
     return;
@@ -102,55 +112,51 @@ function connectStream() {
 
   const serial = $("deviceSelect").value;
   if (!serial) {
-    setStatus("No device", "ADB 没有可用设备");
+    setStatus("No device", "ADB is empty or has no selected device");
     return;
   }
 
-  // Set button to connecting state (disabled to prevent spamming)
+  // Throttle button during connection handshake
   btn.disabled = true;
-  btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
+  btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
 
+  const bitRate = ($("bitRateValue").value || "8") + $("bitRateUnit").value;
   const params = new URLSearchParams({
     serial,
     max_size: $("maxSize").value || "1280",
-    max_fps: $("maxFps").value,
-    bit_rate: $("bitRate").value,
+    max_fps: $("maxFps").value || "60",
+    bit_rate: bitRate,
   });
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${protocol}://${location.host}/ws/scrcpy?${params}`);
   ws.binaryType = "arraybuffer";
   state.ws = ws;
 
-  const jmuxer = new JMuxer({
-    node: 'phoneVideo',
-    mode: 'video',
-    flushingTime: 100,
-    fps: 60,
-    debug: false
+  state.jmuxer = new window.JMuxer({
+    node: "phoneVideo",
+    mode: "video",
+    flushingTime: 100, // Safe flushing time for smooth MSE appending
+    fps: Number($("maxFps").value) || 60,
+    debug: false,
   });
-  state.jmuxer = jmuxer;
 
   ws.onopen = () => {
     setStatus("Streaming", serial);
     emptyState.style.display = "none";
     log(`stream connected: ${serial}`);
 
-    // Enable button, set to Active Stop state
+    // Enable button in Stop state
     btn.disabled = false;
-    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
     btn.classList.add("streaming-active");
-
-    video.play().catch(err => log(`autoplay blocked: ${err.message}`));
   };
   ws.onmessage = (event) => {
-    if (state.jmuxer) {
-      state.jmuxer.feed({
-        video: new Uint8Array(event.data)
-      });
-    }
+    state.jmuxer?.feed({
+      video: new Uint8Array(event.data)
+    });
   };
   ws.onerror = () => {
-    setStatus("Stream error", "查看后端日志获取 scrcpy 细节");
+    setStatus("Stream error", "Check backend scrcpy logs");
     log("stream error");
     resetStream();
   };
@@ -195,50 +201,62 @@ async function sendSwipe(start, end, durationMs) {
   log(`swipe ${start.x},${start.y} -> ${end.x},${end.y}`);
 }
 
+// Wireless connect handling
+$("connectBtn2").addEventListener("click", async () => {
+  const ip = $("wirelessIp").value || "192.168.1.100";
+  const port = $("wirelessPort").value || "5555";
+  const btn = $("connectBtn2");
+  btn.disabled = true;
+  btn.textContent = "Connecting...";
+  try {
+    const data = await api("/api/connect", {
+      method: "POST",
+      body: JSON.stringify({ address: `${ip}:${port}` }),
+    });
+    log(`Wireless connected: ${data.message}`);
+    await loadDevices();
+  } catch (error) {
+    log(`Connection failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Connect";
+  }
+});
+
+// Wireless pairing handling
+$("pairBtn").addEventListener("click", async () => {
+  const ip = $("wirelessIp").value || "192.168.1.100";
+  const port = $("wirelessPort").value || "5555";
+  const code = $("pairCode").value;
+  if (!code) {
+    log("Pairing error: Pairing Code is required");
+    return;
+  }
+  const btn = $("pairBtn");
+  btn.disabled = true;
+  btn.textContent = "Pairing...";
+  try {
+    const data = await api("/api/pair", {
+      method: "POST",
+      body: JSON.stringify({ address: `${ip}:${port}`, code }),
+    });
+    log(`Pairing success: ${data.message}`);
+    $("wirelessPort").value = ""; // Clear pairing port since it is different from connect port
+    $("pairCode").value = "";     // Clear pairing code since pairing is complete
+    await loadDevices();
+  } catch (error) {
+    log(`Pairing failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Pair";
+  }
+});
+
 $("refreshDevices").addEventListener("click", () => loadDevices().catch((error) => log(error.message)));
 $("connectBtn").addEventListener("click", connectStream);
 $("deviceSelect").addEventListener("change", async (event) => {
   state.selected = event.target.value;
-  const current = state.devices.find((d) => d.serial === state.selected);
-  if (current?.state === "device") {
-    await fetchScreenSize(state.selected);
-  }
-});
-
-$("connectBtn2").addEventListener("click", async () => {
-  const ip = $("wirelessIp").value.trim();
-  const port = $("wirelessPort").value.trim();
-  if (!ip || !port) return;
-  const addr = `${ip}:${port}`;
-  try {
-    const res = await api("/api/connect", {
-      method: "POST",
-      body: JSON.stringify({ address: addr }),
-    });
-    log(`connect: ${res.message}`);
-    await loadDevices();
-  } catch (error) {
-    log(`connect error: ${error.message}`);
-  }
-});
-
-$("pairBtn").addEventListener("click", async () => {
-  const ip = $("wirelessIp").value.trim();
-  const port = $("wirelessPort").value.trim();
-  const code = $("pairCode").value.trim();
-  if (!ip || !port || !code) return;
-  const addr = `${ip}:${port}`;
-  try {
-    const res = await api("/api/pair", {
-      method: "POST",
-      body: JSON.stringify({ address: addr, code }),
-    });
-    log(`pair: ${res.message}`);
-    $("pairCode").value = "";
-    await loadDevices();
-  } catch (error) {
-    log(`pair error: ${error.message}`);
-  }
+  await updateDeviceResolution();
 });
 
 document.querySelectorAll("[data-key]").forEach((button) => {
@@ -292,7 +310,7 @@ video.addEventListener("pointerup", async (event) => {
 });
 
 loadDevices()
-  .then(() => setStatus("Idle", "选择设备并连接"))
+  .then(() => setStatus("Ready", "Select a device and connect"))
   .catch((error) => {
     setStatus("ADB error", error.message);
     log(error.message);
