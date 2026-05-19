@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoAndroid Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/styles.css?v=8" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div>
+            <h1>AutoAndroid</h1>
+            <p>Remote Control Studio</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Devices</span>
+            <button id="refreshDevices" title="Refresh Devices">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+          </div>
+          <select id="deviceSelect"></select>
+          <p id="deviceMeta" class="muted">Awaiting connection...</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Wireless Connect</span>
+          </div>
+          <label>
+            Host / IP Address
+            <input id="wirelessIp" type="text" placeholder="192.168.1.100" />
+          </label>
+          <label>
+            Port
+            <input id="wirelessPort" type="text" placeholder="5555" />
+          </label>
+          <label>
+            Pairing Code (Android 11+)
+            <input id="pairCode" type="text" placeholder="123456" />
+          </label>
+          <div class="btn-row">
+            <button id="pairBtn">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+              Pair
+            </button>
+            <button id="connectBtn2" class="primary">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+              Connect
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Stream Settings</span>
+          </div>
+          <label>
+            Max Resolution
+            <input id="maxSize" type="number" min="320" max="4096" step="80" placeholder="Auto" />
+          </label>
+          <div class="key-grid">
+            <label>
+              FPS
+              <input id="maxFps" type="number" min="1" max="120" value="60" />
+            </label>
+            <label>
+              Bitrate
+              <input id="bitRate" type="text" value="8M" />
+            </label>
+          </div>
+          <button id="connectBtn" class="primary" style="margin-top: 8px;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg>
+            Start Stream
+          </button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Controls</span>
+          </div>
+          <div class="key-grid">
+            <button data-key="KEYCODE_BACK">Back</button>
+            <button data-key="KEYCODE_HOME">Home</button>
+            <button data-key="KEYCODE_APP_SWITCH">Recent</button>
+            <button data-key="KEYCODE_POWER">Power</button>
+          </div>
+          <div class="text-row" style="margin-top: 8px;">
+            <input id="textInput" type="text" placeholder="Type text..." />
+            <button id="sendText" class="primary">Send</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="topbar">
+          <div>
+            <strong id="statusText">Idle</strong>
+            <span id="statusDetail">Select a device and connect</span>
+          </div>
+          <div class="hint">Tap screen to click, drag to swipe</div>
+        </div>
+        <div class="phone-wrap">
+          <video id="phoneVideo" autoplay muted playsinline></video>
+          <div id="emptyState">No active stream</div>
+        </div>
+      </section>
+
+      <aside class="logbar">
+        <div class="panel-title">
+          <span>Activity Log</span>
+        </div>
+        <ol id="logs"></ol>
+      </aside>
+    </main>
+    <script src="/assets/jmuxer.min.js"></script>
+    <script src="/assets/app.js?v=8" type="module"></script>
+  </body>
+</html>

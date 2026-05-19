@@ -1,0 +1,14 @@
+services:
+  autoandroid:
+    build: .
+    network_mode: host
+    volumes:
+      - adb-keys:/root/.android
+    environment:
+      ADB_BIN: adb
+      SCRCPY_BIN: scrcpy
+      # Set this if your distro installs the server in a custom location.
+      # SCRCPY_SERVER_PATH: /usr/share/scrcpy/scrcpy-server
+
+volumes:
+  adb-keys:
