@@ -327,7 +327,7 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
         NAL_START = b"\x00\x00\x00\x01"
         buf = b""
         while True:
-            data = await reader.read(64 * 1024)
+            data = await reader.read(4096)
             if not data:
                 return
             buf += data
@@ -337,7 +337,7 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
                 break
 
         while True:
-            chunk = await reader.read(64 * 1024)
+            chunk = await reader.read(4096)
             if not chunk:
                 break
             yield chunk

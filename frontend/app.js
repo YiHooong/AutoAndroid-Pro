@@ -2,45 +2,23 @@ const state = {
   devices: [],
   selected: "",
   ws: null,
-  jmuxer: null,
+  decoder: null,
+  parser: null,
   dragStart: null,
-  pendingBuffers: [],
-  renderLoopId: null,
+  videoWidth: 0,
+  videoHeight: 0,
 };
 
 const $ = (id) => document.getElementById(id);
-const video = $("phoneVideo");
+const canvas = $("phoneCanvas");
+const ctx = canvas.getContext("2d");
 const emptyState = $("emptyState");
-
-// Extreme low-latency dynamic playback-rate synchronization loop
-video.addEventListener("timeupdate", () => {
-  if (video.buffered && video.buffered.length > 0) {
-    const bufferEnd = video.buffered.end(video.buffered.length - 1);
-    const delay = bufferEnd - video.currentTime;
-    
-    if (delay > 0.25) {
-      // If the backlog is substantial, perform an instantaneous hard seek
-      video.currentTime = bufferEnd - 0.01;
-      video.playbackRate = 1.0;
-    } else if (delay > 0.06) {
-      // If latency is slightly accumulating (above 60ms), smoothly accelerate to catch up!
-      video.playbackRate = Math.min(2.0, 1.0 + (delay - 0.05) * 3);
-    } else {
-      // Locked inside perfect zero-latency state
-      video.playbackRate = 1.0;
-    }
-  }
-});
 
 function log(message) {
   const item = document.createElement("li");
   item.textContent = `${new Date().toLocaleTimeString()} ${message}`;
-  
   const container = $("logs");
-  // Prepend at the top so newest is always at the absolute top
   container.insertBefore(item, container.firstChild);
-  
-  // Keep scrollbar pinned to the top to see the newest entry immediately
   container.scrollTop = 0;
 }
 
@@ -103,26 +81,62 @@ async function loadDevices() {
   }
 }
 
-function resetStream() {
-  if (state.renderLoopId) {
-    cancelAnimationFrame(state.renderLoopId);
-    state.renderLoopId = null;
+class AnnexBParser {
+  constructor(onNal) {
+    this.onNal = onNal;
+    this.buffer = new Uint8Array(0);
   }
-  state.pendingBuffers = [];
 
+  append(data) {
+    const next = new Uint8Array(this.buffer.length + data.length);
+    next.set(this.buffer, 0);
+    next.set(data, this.buffer.length);
+    this.buffer = next;
+
+    let offset = 0;
+    while (true) {
+      const nextStart = this.findStartCode(this.buffer, offset + 4);
+      if (nextStart === -1) {
+        this.buffer = this.buffer.subarray(offset);
+        break;
+      }
+      this.onNal(this.buffer.subarray(offset, nextStart));
+      offset = nextStart;
+    }
+  }
+
+  findStartCode(buf, start) {
+    const len = buf.length - 4;
+    for (let i = start; i <= len; i++) {
+      if (buf[i] === 0 && buf[i + 1] === 0) {
+        if (buf[i + 2] === 1) return i;
+        if (buf[i + 2] === 0 && buf[i + 3] === 1) return i;
+      }
+    }
+    return -1;
+  }
+}
+
+function resetStream() {
   if (state.ws) {
     state.ws.close();
     state.ws = null;
   }
-  if (state.jmuxer) {
-    state.jmuxer.destroy();
-    state.jmuxer = null;
+  if (state.decoder) {
+    try {
+      state.decoder.close();
+    } catch (e) {}
+    state.decoder = null;
   }
-  video.removeAttribute("src");
-  video.load();
+  state.parser = null;
+  state.videoWidth = 0;
+  state.videoHeight = 0;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.style.display = "none";
+  canvas.classList.remove("active");
   emptyState.style.display = "block";
 
-  // Reset button state
   const btn = $("connectBtn");
   btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg> Start Stream`;
   btn.disabled = false;
@@ -131,8 +145,6 @@ function resetStream() {
 
 function connectStream() {
   const btn = $("connectBtn");
-
-  // If streaming is active, act as a Stop action
   if (state.ws) {
     resetStream();
     return;
@@ -144,7 +156,6 @@ function connectStream() {
     return;
   }
 
-  // Throttle button during connection handshake
   btn.disabled = true;
   btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
 
@@ -155,64 +166,106 @@ function connectStream() {
     max_fps: $("maxFps").value || "0",
     bit_rate: bitRate,
   });
+
+  canvas.style.display = "block";
+  canvas.classList.add("active");
+  $("phoneVideo").style.display = "none";
+
+  state.decoder = new VideoDecoder({
+    output(frame) {
+      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+        canvas.width = frame.displayWidth;
+        canvas.height = frame.displayHeight;
+        state.videoWidth = frame.displayWidth;
+        state.videoHeight = frame.displayHeight;
+      }
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      frame.close();
+    },
+    error(e) {
+      log(`Decoder error: ${e.message}`);
+      console.error(e);
+    }
+  });
+
+  state.decoder.configure({
+    codec: "avc1.42e01f",
+    optimizeForLatency: true,
+  });
+
+  let hasSeenKeyFrame = false;
+  let pendingSps = null;
+  let pendingPps = null;
+
+  state.parser = new AnnexBParser((nal) => {
+    try {
+      let offset = 0;
+      if (nal[0] === 0 && nal[1] === 0) {
+        if (nal[2] === 1) offset = 3;
+        else if (nal[2] === 0 && nal[3] === 1) offset = 4;
+      }
+      const nalType = nal[offset] & 0x1f;
+
+      if (nalType === 7) { // SPS
+        pendingSps = nal;
+        return;
+      }
+      if (nalType === 8) { // PPS
+        pendingPps = nal;
+        return;
+      }
+      if (nalType === 5) { // IDR key frame — stitch SPS+PPS+IDR
+        let combined = nal;
+        if (pendingSps && pendingPps) {
+          combined = new Uint8Array(pendingSps.length + pendingPps.length + nal.length);
+          combined.set(pendingSps, 0);
+          combined.set(pendingPps, pendingSps.length);
+          combined.set(nal, pendingSps.length + pendingPps.length);
+        }
+        state.decoder?.decode(new EncodedVideoChunk({
+          type: "key",
+          timestamp: performance.now() * 1000,
+          data: combined,
+        }));
+        hasSeenKeyFrame = true;
+      } else if (nalType === 1 && hasSeenKeyFrame) { // Delta frame
+        state.decoder?.decode(new EncodedVideoChunk({
+          type: "delta",
+          timestamp: performance.now() * 1000,
+          data: nal,
+        }));
+      }
+    } catch (err) {
+      console.error("Frame decoding error:", err);
+    }
+  });
+
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${protocol}://${location.host}/ws/scrcpy?${params}`);
   ws.binaryType = "arraybuffer";
   state.ws = ws;
 
-  state.jmuxer = new window.JMuxer({
-    node: "phoneVideo",
-    mode: "video",
-    flushingTime: 0, // Flush instantly on every H.264 chunk for absolute zero latency
-    fps: Number($("maxFps").value) || 60,
-    debug: false,
-  });
-
   ws.onopen = () => {
     setStatus("Streaming", serial);
     emptyState.style.display = "none";
     log(`stream connected: ${serial}`);
-
-    // Enable button in Stop state
     btn.disabled = false;
     btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
     btn.classList.add("streaming-active");
-
-    // Butter-smooth frame-pacing coalescing render loop
-    function renderLoop() {
-      if (!state.ws) return;
-      if (state.pendingBuffers.length > 0) {
-        const buffers = state.pendingBuffers;
-        state.pendingBuffers = [];
-
-        let totalLength = 0;
-        for (let i = 0; i < buffers.length; i++) {
-          totalLength += buffers[i].length;
-        }
-
-        const combined = new Uint8Array(totalLength);
-        let offset = 0;
-        for (let i = 0; i < buffers.length; i++) {
-          combined.set(buffers[i], offset);
-          offset += buffers[i].length;
-        }
-
-        state.jmuxer?.feed({
-          video: combined
-        });
-      }
-      state.renderLoopId = requestAnimationFrame(renderLoop);
-    }
-    state.renderLoopId = requestAnimationFrame(renderLoop);
   };
+
   ws.onmessage = (event) => {
-    state.pendingBuffers.push(new Uint8Array(event.data));
+    if (state.parser) {
+      state.parser.append(new Uint8Array(event.data));
+    }
   };
+
   ws.onerror = () => {
     setStatus("Stream error", "Check backend scrcpy logs");
     log("stream error");
     resetStream();
   };
+
   ws.onclose = (event) => {
     setStatus("Disconnected", event.reason || "stream closed");
     log(`stream closed${event.reason ? `: ${event.reason}` : ""}`);
@@ -221,9 +274,9 @@ function connectStream() {
 }
 
 function videoPoint(event) {
-  const rect = video.getBoundingClientRect();
-  const scaleX = video.videoWidth / rect.width;
-  const scaleY = video.videoHeight / rect.height;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = state.videoWidth / rect.width;
+  const scaleY = state.videoHeight / rect.height;
   return {
     x: Math.round((event.clientX - rect.left) * scaleX),
     y: Math.round((event.clientY - rect.top) * scaleY),
@@ -254,7 +307,6 @@ async function sendSwipe(start, end, durationMs) {
   log(`swipe ${start.x},${start.y} -> ${end.x},${end.y}`);
 }
 
-// Wireless connect handling
 $("connectBtn2").addEventListener("click", async () => {
   const ip = $("wirelessIp").value || "192.168.1.100";
   const port = $("wirelessPort").value || "5555";
@@ -276,7 +328,6 @@ $("connectBtn2").addEventListener("click", async () => {
   }
 });
 
-// Wireless pairing handling
 $("pairBtn").addEventListener("click", async () => {
   const ip = $("wirelessIp").value || "192.168.1.100";
   const port = $("wirelessPort").value || "5555";
@@ -294,8 +345,8 @@ $("pairBtn").addEventListener("click", async () => {
       body: JSON.stringify({ address: `${ip}:${port}`, code }),
     });
     log(`Pairing success: ${data.message}`);
-    $("wirelessPort").value = ""; // Clear pairing port since it is different from connect port
-    $("pairCode").value = "";     // Clear pairing code since pairing is complete
+    $("wirelessPort").value = "";
+    $("pairCode").value = "";
     await loadDevices();
   } catch (error) {
     log(`Pairing failed: ${error.message}`);
@@ -336,17 +387,17 @@ $("sendText").addEventListener("click", async () => {
   input.value = "";
 });
 
-video.addEventListener("pointerdown", (event) => {
-  if (!video.videoWidth) return;
-  video.setPointerCapture(event.pointerId);
+canvas.addEventListener("pointerdown", (event) => {
+  if (!state.videoWidth) return;
+  canvas.setPointerCapture(event.pointerId);
   state.dragStart = {
     ...videoPoint(event),
     time: performance.now(),
   };
 });
 
-video.addEventListener("pointerup", async (event) => {
-  if (!state.dragStart || !video.videoWidth) return;
+canvas.addEventListener("pointerup", async (event) => {
+  if (!state.dragStart || !state.videoWidth) return;
   const end = videoPoint(event);
   const start = state.dragStart;
   state.dragStart = null;

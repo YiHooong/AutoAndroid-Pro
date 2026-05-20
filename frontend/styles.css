@@ -285,6 +285,22 @@ select {
   border-color: #f0b35a;
 }
 
+#phoneCanvas {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  width: auto;
+  height: auto;
+  background: #050607;
+  border: 1px solid #394149;
+  border-radius: 8px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.3s;
+}
+
+#phoneCanvas.active {
+  border-color: #f0b35a;
+}
+
 #emptyState {
   position: absolute;
   color: #6f7982;
