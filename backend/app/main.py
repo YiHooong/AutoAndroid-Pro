@@ -141,7 +141,7 @@ async def scrcpy_ws(
     websocket: WebSocket,
     serial: str | None = Query(default=None),
     max_size: int = Query(default=1280, ge=320, le=4096),
-    max_fps: int = Query(default=60, ge=1, le=120),
+    max_fps: int = Query(default=60, ge=0),
     bit_rate: str = Query(default="8M"),
 ):
     await websocket.accept()

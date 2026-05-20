@@ -4,11 +4,33 @@ const state = {
   ws: null,
   jmuxer: null,
   dragStart: null,
+  pendingBuffers: [],
+  renderLoopId: null,
 };
 
 const $ = (id) => document.getElementById(id);
 const video = $("phoneVideo");
 const emptyState = $("emptyState");
+
+// Extreme low-latency dynamic playback-rate synchronization loop
+video.addEventListener("timeupdate", () => {
+  if (video.buffered && video.buffered.length > 0) {
+    const bufferEnd = video.buffered.end(video.buffered.length - 1);
+    const delay = bufferEnd - video.currentTime;
+    
+    if (delay > 0.25) {
+      // If the backlog is substantial, perform an instantaneous hard seek
+      video.currentTime = bufferEnd - 0.01;
+      video.playbackRate = 1.0;
+    } else if (delay > 0.06) {
+      // If latency is slightly accumulating (above 60ms), smoothly accelerate to catch up!
+      video.playbackRate = Math.min(2.0, 1.0 + (delay - 0.05) * 3);
+    } else {
+      // Locked inside perfect zero-latency state
+      video.playbackRate = 1.0;
+    }
+  }
+});
 
 function log(message) {
   const item = document.createElement("li");
@@ -82,6 +104,12 @@ async function loadDevices() {
 }
 
 function resetStream() {
+  if (state.renderLoopId) {
+    cancelAnimationFrame(state.renderLoopId);
+    state.renderLoopId = null;
+  }
+  state.pendingBuffers = [];
+
   if (state.ws) {
     state.ws.close();
     state.ws = null;
@@ -124,7 +152,7 @@ function connectStream() {
   const params = new URLSearchParams({
     serial,
     max_size: $("maxSize").value || "1280",
-    max_fps: $("maxFps").value || "60",
+    max_fps: $("maxFps").value || "0",
     bit_rate: bitRate,
   });
   const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -135,7 +163,7 @@ function connectStream() {
   state.jmuxer = new window.JMuxer({
     node: "phoneVideo",
     mode: "video",
-    flushingTime: 100, // Safe flushing time for smooth MSE appending
+    flushingTime: 0, // Flush instantly on every H.264 chunk for absolute zero latency
     fps: Number($("maxFps").value) || 60,
     debug: false,
   });
@@ -149,11 +177,36 @@ function connectStream() {
     btn.disabled = false;
     btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
     btn.classList.add("streaming-active");
+
+    // Butter-smooth frame-pacing coalescing render loop
+    function renderLoop() {
+      if (!state.ws) return;
+      if (state.pendingBuffers.length > 0) {
+        const buffers = state.pendingBuffers;
+        state.pendingBuffers = [];
+
+        let totalLength = 0;
+        for (let i = 0; i < buffers.length; i++) {
+          totalLength += buffers[i].length;
+        }
+
+        const combined = new Uint8Array(totalLength);
+        let offset = 0;
+        for (let i = 0; i < buffers.length; i++) {
+          combined.set(buffers[i], offset);
+          offset += buffers[i].length;
+        }
+
+        state.jmuxer?.feed({
+          video: combined
+        });
+      }
+      state.renderLoopId = requestAnimationFrame(renderLoop);
+    }
+    state.renderLoopId = requestAnimationFrame(renderLoop);
   };
   ws.onmessage = (event) => {
-    state.jmuxer?.feed({
-      video: new Uint8Array(event.data)
-    });
+    state.pendingBuffers.push(new Uint8Array(event.data));
   };
   ws.onerror = () => {
     setStatus("Stream error", "Check backend scrcpy logs");

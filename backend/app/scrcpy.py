@@ -131,8 +131,10 @@ class ScrcpySession:
             "send_device_meta=false",
             _raw_stream_option(self.version),
             f"max_size={self.options.max_size}",
-            f"max_fps={self.options.max_fps}",
         ]
+        if self.options.max_fps > 0:
+            option_pairs.append(f"max_fps={self.options.max_fps}")
+
         if self.major >= 2:
             option_pairs += [
                 f"socket_name={self.socket_name}",
@@ -206,6 +208,9 @@ class ScrcpySession:
             writer: asyncio.StreamWriter | None = None
             try:
                 reader, writer = await asyncio.open_connection("127.0.0.1", self.port)
+                sock = writer.get_extra_info("socket")
+                if sock:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 # Peek: the scrcpy server always sends at least 1 byte (dummy
                 # byte) immediately after accepting.  If we get nothing within
                 # a reasonable window the connection was forwarded to nowhere.
