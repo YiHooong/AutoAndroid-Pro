@@ -14,6 +14,11 @@ const state = {
   renderLoopId: null,
   // Interaction
   dragStart: null,
+  // FPS Tracking
+  frameCount: 0,
+  lastFpsTime: 0,
+  lastTotalFrames: 0,
+  fpsIntervalId: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -42,7 +47,8 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || response.statusText);
+    const msg = typeof body.detail === "object" ? JSON.stringify(body.detail) : (body.detail || response.statusText);
+    throw new Error(msg);
   }
   return response.json();
 }
@@ -142,7 +148,65 @@ video.addEventListener("timeupdate", () => {
   }
 });
 
+function startFpsCounter() {
+  stopFpsCounter();
+  
+  const fpsCounter = $("fpsCounter");
+  fpsCounter.style.display = "inline-flex";
+  fpsCounter.textContent = "0 FPS";
+  
+  state.frameCount = 0;
+  state.lastFpsTime = performance.now();
+  
+  if (video.getVideoPlaybackQuality) {
+    try {
+      state.lastTotalFrames = video.getVideoPlaybackQuality().totalVideoFrames || 0;
+    } catch (e) {
+      state.lastTotalFrames = 0;
+    }
+  } else {
+    state.lastTotalFrames = 0;
+  }
+  
+  state.fpsIntervalId = setInterval(() => {
+    const now = performance.now();
+    const elapsedMs = now - state.lastFpsTime;
+    if (elapsedMs <= 0) return;
+    
+    let currentFrames = 0;
+    if (state.activeEngine === "webcodecs") {
+      currentFrames = state.frameCount;
+      state.frameCount = 0;
+    } else {
+      if (video.getVideoPlaybackQuality) {
+        try {
+          const total = video.getVideoPlaybackQuality().totalVideoFrames || 0;
+          currentFrames = Math.max(0, total - state.lastTotalFrames);
+          state.lastTotalFrames = total;
+        } catch (e) {
+          currentFrames = 0;
+        }
+      } else {
+        currentFrames = 0;
+      }
+    }
+    
+    const fps = Math.round((currentFrames * 1000) / elapsedMs);
+    fpsCounter.textContent = `${fps} FPS`;
+    state.lastFpsTime = now;
+  }, 1000);
+}
+
+function stopFpsCounter() {
+  if (state.fpsIntervalId) {
+    clearInterval(state.fpsIntervalId);
+    state.fpsIntervalId = null;
+  }
+  $("fpsCounter").style.display = "none";
+}
+
 function resetStream() {
+  stopFpsCounter();
   if (state.ws) {
     state.ws.close();
     state.ws = null;
@@ -257,6 +321,7 @@ function connectStream() {
           }
           ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
           frame.close();
+          state.frameCount++;
         },
         error(e) {
           log(`Decoder runtime error: ${e.message}. Falling back to JMuxer.`);
@@ -379,6 +444,7 @@ function connectStream() {
     if (state.activeEngine === "jmuxer") {
       startJmuxerLoop();
     }
+    startFpsCounter();
   };
 
   ws.onmessage = (event) => {
@@ -414,8 +480,8 @@ function activePoint(event) {
   const scaleX = width / rect.width;
   const scaleY = height / rect.height;
   return {
-    x: Math.round((event.clientX - rect.left) * scaleX),
-    y: Math.round((event.clientY - rect.top) * scaleY),
+    x: Math.max(0, Math.round((event.clientX - rect.left) * scaleX)),
+    y: Math.max(0, Math.round((event.clientY - rect.top) * scaleY)),
   };
 }
 
@@ -523,6 +589,9 @@ $("sendText").addEventListener("click", async () => {
   input.value = "";
 });
 
+let accumulatedDeltaY = 0;
+let isScrolling = false;
+
 [video, canvas].forEach((el) => {
   el.addEventListener("pointerdown", (event) => {
     const isWC = state.activeEngine === "webcodecs";
@@ -553,6 +622,56 @@ $("sendText").addEventListener("click", async () => {
       log(error.message);
     }
   });
+
+  el.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const isWC = state.activeEngine === "webcodecs";
+    const width = isWC ? state.videoWidth : video.videoWidth;
+    const height = isWC ? state.videoHeight : video.videoHeight;
+    if (!width || !height) return;
+
+    if (accumulatedDeltaY !== 0 && Math.sign(event.deltaY) !== Math.sign(accumulatedDeltaY)) {
+      accumulatedDeltaY = 0;
+    }
+    accumulatedDeltaY += event.deltaY;
+    const pt = activePoint(event);
+
+    if (isScrolling) return;
+    isScrolling = true;
+
+    setTimeout(async () => {
+      const totalDelta = accumulatedDeltaY;
+      accumulatedDeltaY = 0;
+
+      if (Math.abs(totalDelta) < 10) {
+        isScrolling = false;
+        return;
+      }
+
+      const swipeDistance = Math.min(height * 0.4, Math.max(50, Math.abs(totalDelta) * 2));
+      const startY = pt.y;
+      let endY = pt.y;
+
+      if (totalDelta > 0) {
+        endY = Math.round(Math.max(10, startY - swipeDistance));
+      } else {
+        endY = Math.round(Math.min(height - 10, startY + swipeDistance));
+      }
+
+      if (Math.abs(endY - startY) > 10) {
+        try {
+          await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, 250);
+        } catch (error) {
+          log(error.message || String(error));
+        }
+      }
+
+      // Add an extra 50ms safety cooldown after the actual ADB network call returns
+      setTimeout(() => {
+        isScrolling = false;
+      }, 50);
+    }, 50);
+  }, { passive: false });
 });
 
 loadDevices()

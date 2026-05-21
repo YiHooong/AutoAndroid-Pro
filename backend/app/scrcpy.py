@@ -141,13 +141,13 @@ class ScrcpySession:
                 "audio=false",
                 "send_codec_meta=false",
                 f"video_bit_rate={bit_rate}",
-                "video_codec_options=i-frame-interval=2",
+                "video_codec_options=i-frame-interval=1",
             ]
         else:
             option_pairs += [
                 "send_frame_meta=false",
                 f"bit_rate={bit_rate}",
-                "codec_options=i-frame-interval=2",
+                "codec_options=i-frame-interval=1",
             ]
 
         command = (

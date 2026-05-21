@@ -135,7 +135,8 @@ select {
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #f0b35a, #6fc3b2);
+  background: url("logo.png") no-repeat center center;
+  background-size: contain;
 }
 
 .brand h1 {
@@ -373,4 +374,19 @@ button.streaming-active {
 button.streaming-active:hover {
   background: #dc2626 !important;
   border-color: #dc2626 !important;
+}
+
+.fps-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f0b35a;
+  background: rgba(240, 179, 90, 0.15);
+  border: 1px solid rgba(240, 179, 90, 0.3);
+  border-radius: 6px;
+  font-family: monospace;
+  vertical-align: middle;
 }
