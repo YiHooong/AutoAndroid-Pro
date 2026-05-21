@@ -337,16 +337,23 @@ class DeviceStreamBroadcaster:
             async with self.lock:
                 self.read_task = None
                 self.cached_header = None
+                # Close all subscriber sockets to signal the stream ended
+                for ws in list(self.subscribers):
+                    try:
+                        await ws.close(code=1011, reason="Stream source disconnected")
+                    except Exception:
+                        pass
+                self.subscribers.clear()
 
     async def _broadcast(self, chunk: bytes) -> None:
-        async def safe_send(ws: WebSocket):
+        dead: list[WebSocket] = []
+        for ws in list(self.subscribers):
             try:
                 await ws.send_bytes(chunk)
             except Exception:
-                await self.unsubscribe(ws)
-
-        for ws in list(self.subscribers):
-            asyncio.create_task(safe_send(ws))
+                dead.append(ws)
+        for ws in dead:
+            self.subscribers.discard(ws)
 
 
 BROADCASTERS: dict[str, DeviceStreamBroadcaster] = {}

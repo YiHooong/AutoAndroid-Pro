@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import adb
-from .scrcpy import StreamOptions, stream_mp4_chunks
+from .scrcpy import StreamOptions
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +92,35 @@ def wm_size(serial: str):
         return {"raw": output.strip()}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/devices/{serial}/refresh-rate")
+def get_refresh_rate(serial: str):
+    try:
+        output = adb.shell(serial, "dumpsys display")
+        import re
+        rates = []
+        for match in re.finditer(r"baseModeRefreshRate=([0-9.]+)", output):
+            rates.append(float(match.group(1)))
+        for match in re.finditer(r"refreshRate=([0-9.]+)", output):
+            rates.append(float(match.group(1)))
+        for match in re.finditer(r"fps=([0-9.]+)", output):
+            rates.append(float(match.group(1)))
+            
+        if not rates:
+            return {"fps": 60}
+            
+        max_rate = max(rates)
+        if max_rate > 130:
+            return {"fps": 144}
+        elif max_rate > 105:
+            return {"fps": 120}
+        elif max_rate > 75:
+            return {"fps": 90}
+        else:
+            return {"fps": 60}
+    except Exception as exc:
+        return {"fps": 60}
 
 
 @app.post("/api/devices/{serial}/tap")
