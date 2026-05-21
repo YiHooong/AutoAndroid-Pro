@@ -103,6 +103,7 @@ class ScrcpySession:
         self.port = _free_port()
         self.server_proc: subprocess.Popen[bytes] | None = None
         self.ffmpeg_proc: asyncio.subprocess.Process | None = None
+        self.control_writer: asyncio.StreamWriter | None = None
 
     def _adb_prefix(self) -> list[str]:
         return [ADB_BIN, "-s", self.serial]
@@ -126,7 +127,7 @@ class ScrcpySession:
         option_pairs = [
             "log_level=info",
             "tunnel_forward=true",
-            "control=false",
+            "control=true",
             "cleanup=true",
             "send_device_meta=false",
             _raw_stream_option(self.version),
@@ -203,10 +204,13 @@ class ScrcpySession:
         (ADB daemon listens on it).  But if the scrcpy server hasn't created
         its abstract socket yet, ADB accepts the TCP connection and then
         closes it — yielding an immediate EOF rather than an ``OSError``.
-        We therefore retry on *both* connection errors and early-EOF.
+
+        With control=true, scrcpy won't send any data on the video socket
+        until the control socket is also connected.  So we just verify the
+        connection is alive (no immediate EOF) with a short wait, then return.
         """
         last_error: Exception | None = None
-        for _ in range(50):
+        for attempt in range(50):
             reader: asyncio.StreamReader | None = None
             writer: asyncio.StreamWriter | None = None
             try:
@@ -214,16 +218,20 @@ class ScrcpySession:
                 sock = writer.get_extra_info("socket")
                 if sock:
                     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                # Peek: the scrcpy server always sends at least 1 byte (dummy
-                # byte) immediately after accepting.  If we get nothing within
-                # a reasonable window the connection was forwarded to nowhere.
-                first = await asyncio.wait_for(reader.read(1), timeout=5.0)
-                if not first:
-                    raise ConnectionError("EOF immediately after connect")
-                # Prepend the byte we consumed back into the reader buffer.
-                reader._buffer = bytearray(first) + reader._buffer  # noqa: SLF001
+                # With control=true, the server won't send data until the control
+                # socket is also connected. We do a brief wait to catch immediate
+                # EOF (which means the forwarded socket was rejected).
+                try:
+                    first = await asyncio.wait_for(reader.read(1), timeout=0.5)
+                    if not first:
+                        raise ConnectionError("EOF immediately after connect")
+                    # Prepend the byte we consumed back into the reader buffer.
+                    reader._buffer = bytearray(first) + reader._buffer  # noqa: SLF001
+                except asyncio.TimeoutError:
+                    # Timeout is OK — server is waiting for the control socket
+                    pass
                 return reader, writer
-            except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+            except (OSError, ConnectionError) as exc:
                 last_error = exc
                 if writer:
                     writer.close()
@@ -232,7 +240,43 @@ class ScrcpySession:
                 await asyncio.sleep(0.2)
         raise ConnectionError(f"scrcpy video socket not available: {last_error}")
 
+    async def connect_control_socket(self) -> asyncio.StreamWriter:
+        """Connect to the scrcpy control socket (second connection after video).
+
+        With control=true and tunnel_forward=true, scrcpy server accepts
+        two connections on the same port: first is video, second is control.
+        """
+        last_error: Exception | None = None
+        for _ in range(30):
+            writer: asyncio.StreamWriter | None = None
+            try:
+                _, writer = await asyncio.open_connection("127.0.0.1", self.port)
+                sock = writer.get_extra_info("socket")
+                if sock:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.control_writer = writer
+                return writer
+            except (OSError, ConnectionError) as exc:
+                last_error = exc
+                if writer:
+                    writer.close()
+                    with contextlib.suppress(Exception):
+                        await writer.wait_closed()
+                await asyncio.sleep(0.1)
+        raise ConnectionError(f"scrcpy control socket not available: {last_error}")
+
+    async def send_control(self, data: bytes) -> None:
+        """Send a binary control message to scrcpy server."""
+        if self.control_writer and not self.control_writer.is_closing():
+            self.control_writer.write(data)
+            await self.control_writer.drain()
+
     async def close(self) -> None:
+        if self.control_writer:
+            self.control_writer.close()
+            with contextlib.suppress(Exception):
+                await self.control_writer.wait_closed()
+            self.control_writer = None
         with contextlib.suppress(Exception):
             run_adb(["forward", "--remove", f"tcp:{self.port}"], serial=self.serial)
         if self.ffmpeg_proc and self.ffmpeg_proc.returncode is None:
@@ -367,6 +411,13 @@ async def get_broadcaster(serial: str) -> DeviceStreamBroadcaster:
         return BROADCASTERS[serial]
 
 
+async def send_touch_control(serial: str, data: bytes) -> None:
+    """Forward a binary scrcpy control message to the active session."""
+    session = ACTIVE_SESSIONS.get(serial)
+    if session:
+        await session.send_control(data)
+
+
 async def stream_h264_chunks(serial: str, options: StreamOptions):
     if serial not in SESSION_LOCKS:
         SESSION_LOCKS[serial] = asyncio.Lock()
@@ -394,6 +445,13 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
                     err = session.server_proc.stderr.read().decode('utf-8', 'ignore')
                     print(f"[scrcpy-server error]: {err}")
                 raise e
+
+            # Connect the control socket (second connection with control=true)
+            try:
+                await session.connect_control_socket()
+                print(f"[scrcpy] control socket connected for {serial}")
+            except ConnectionError as e:
+                print(f"[scrcpy] WARNING: control socket failed: {e} — touch input will fall back to adb")
 
         # scrcpy 1.x sends metadata before the H.264 stream:
         #   - 1 dummy byte (0x00)

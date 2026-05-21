@@ -440,6 +440,25 @@ function connectStream() {
   };
 }
 
+// ═══════════════════════════════════════════════════════
+// Real-time touch control via scrcpy control protocol
+// Inspired by ws-scrcpy's FeaturedInteractionHandler
+// Binary format: TYPE(1) + ACTION(1) + POINTER_ID(8) + X(4) + Y(4) + W(2) + H(2) + PRESSURE(2) + BUTTONS(4) = 28 bytes
+// ═══════════════════════════════════════════════════════
+
+const SCRCPY_CONTROL = {
+  TYPE_TOUCH: 2,
+  ACTION_DOWN: 0,
+  ACTION_UP: 1,
+  ACTION_MOVE: 2,
+  BUTTON_PRIMARY: 1,       // left click
+  BUTTON_SECONDARY: 2,     // right click (back)
+  BUTTON_TERTIARY: 4,      // middle click
+  MAX_PRESSURE: 0xFFFF,
+  TYPE_BACK_OR_SCREEN_ON: 4,   // inject keycode
+  KEYCODE_BACK: 4,
+};
+
 function activePoint(event) {
   const rect = canvas.getBoundingClientRect();
   const width = state.videoWidth;
@@ -465,6 +484,52 @@ function activePoint(event) {
   };
 }
 
+function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons) {
+  // scrcpy inject_touch_event binary format (28 bytes total):
+  // type:1 action:1 pointerId:8 x:4 y:4 screenW:2 screenH:2 pressure:2 buttons:4
+  const buf = new ArrayBuffer(28);
+  const view = new DataView(buf);
+  let offset = 0;
+  view.setUint8(offset, SCRCPY_CONTROL.TYPE_TOUCH); offset += 1;
+  view.setUint8(offset, action); offset += 1;
+  // pointerId is long (8 bytes) — upper 4 bytes zero, lower 4 bytes = id
+  view.setUint32(offset, 0); offset += 4;
+  view.setUint32(offset, pointerId); offset += 4;
+  view.setUint32(offset, x); offset += 4;
+  view.setUint32(offset, y); offset += 4;
+  view.setUint16(offset, screenW); offset += 2;
+  view.setUint16(offset, screenH); offset += 2;
+  view.setUint16(offset, pressure); offset += 2;
+  view.setUint32(offset, buttons); offset += 4;
+  return buf;
+}
+
+function buildKeyEventMessage(action, keycode) {
+  // scrcpy inject_keycode: type:1 action:1 keycode:4 repeat:4 metaState:4 = 14 bytes
+  const buf = new ArrayBuffer(14);
+  const view = new DataView(buf);
+  view.setUint8(0, SCRCPY_CONTROL.TYPE_BACK_OR_SCREEN_ON);
+  view.setUint8(1, action);  // 0=DOWN, 1=UP
+  view.setUint32(2, keycode);
+  view.setUint32(6, 0);   // repeat
+  view.setUint32(10, 0);  // metaState
+  return buf;
+}
+
+function sendTouch(action, event, pointerId = 0) {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+  const pt = activePoint(event);
+  const screenW = state.videoWidth;
+  const screenH = state.videoHeight;
+  if (!screenW || !screenH) return;
+
+  const pressure = action === SCRCPY_CONTROL.ACTION_UP ? 0 : SCRCPY_CONTROL.MAX_PRESSURE;
+  const buttons = event.button === 2 ? SCRCPY_CONTROL.BUTTON_SECONDARY : SCRCPY_CONTROL.BUTTON_PRIMARY;
+  const msg = buildTouchMessage(action, pointerId, pt.x, pt.y, screenW, screenH, pressure, buttons);
+  state.ws.send(msg);
+}
+
+// Fallback HTTP-based tap/swipe for non-realtime operations
 async function sendTap(point) {
   const serial = $("deviceSelect").value;
   await api(`/api/devices/${encodeURIComponent(serial)}/tap`, {
@@ -488,6 +553,131 @@ async function sendSwipe(start, end, durationMs) {
   });
   log(`swipe ${start.x},${start.y} -> ${end.x},${end.y}`);
 }
+
+// ═══════════════════════════════════════════════════════
+// Pointer event handlers — real-time touch via scrcpy protocol
+// ═══════════════════════════════════════════════════════
+
+// Prevent context menu on right-click over the canvas
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+canvas.addEventListener("pointerdown", (event) => {
+  const width = state.videoWidth;
+  if (!width) return;
+  event.preventDefault();
+  canvas.setPointerCapture(event.pointerId);
+
+  // Right-click → send BACK key
+  if (event.button === 2) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(buildKeyEventMessage(0, SCRCPY_CONTROL.KEYCODE_BACK)); // DOWN
+      state.ws.send(buildKeyEventMessage(1, SCRCPY_CONTROL.KEYCODE_BACK)); // UP
+      log("key BACK (right-click)");
+    }
+    return;
+  }
+
+  // Left-click / touch → real-time ACTION_DOWN
+  sendTouch(SCRCPY_CONTROL.ACTION_DOWN, event, event.pointerId);
+  state.dragStart = {
+    ...activePoint(event),
+    time: performance.now(),
+    pointerId: event.pointerId,
+  };
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  if (!state.dragStart) return;
+  // Real-time ACTION_MOVE — this is the key difference from our old approach
+  // The Android device sees the finger drag in real-time
+  sendTouch(SCRCPY_CONTROL.ACTION_MOVE, event, event.pointerId);
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  if (event.button === 2) return; // right-click handled in pointerdown
+  if (!state.dragStart) return;
+
+  // Send ACTION_UP
+  sendTouch(SCRCPY_CONTROL.ACTION_UP, event, event.pointerId);
+
+  const end = activePoint(event);
+  const start = state.dragStart;
+  state.dragStart = null;
+
+  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  if (distance < 12) {
+    log(`tap ${end.x}, ${end.y}`);
+  } else {
+    log(`drag ${start.x},${start.y} -> ${end.x},${end.y}`);
+  }
+});
+
+canvas.addEventListener("pointercancel", (event) => {
+  if (state.dragStart) {
+    sendTouch(SCRCPY_CONTROL.ACTION_UP, event, event.pointerId);
+    state.dragStart = null;
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// Scroll wheel — mapped to swipe via scrcpy touch protocol
+// ═══════════════════════════════════════════════════════
+let accumulatedDeltaY = 0;
+let isScrolling = false;
+
+canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const width = state.videoWidth;
+  const height = state.videoHeight;
+  if (!width || !height) return;
+
+  if (accumulatedDeltaY !== 0 && Math.sign(event.deltaY) !== Math.sign(accumulatedDeltaY)) {
+    accumulatedDeltaY = 0;
+  }
+  accumulatedDeltaY += event.deltaY;
+  const pt = activePoint(event);
+
+  if (isScrolling) return;
+  isScrolling = true;
+
+  setTimeout(async () => {
+    const totalDelta = accumulatedDeltaY;
+    accumulatedDeltaY = 0;
+
+    if (Math.abs(totalDelta) < 10) {
+      isScrolling = false;
+      return;
+    }
+
+    const swipeDistance = Math.min(height * 0.4, Math.max(50, Math.abs(totalDelta) * 2));
+    const startY = pt.y;
+    let endY = pt.y;
+
+    if (totalDelta > 0) {
+      endY = Math.round(Math.max(10, startY - swipeDistance));
+    } else {
+      endY = Math.round(Math.min(height - 10, startY + swipeDistance));
+    }
+
+    if (Math.abs(endY - startY) > 10) {
+      try {
+        const smooth = $("smoothScroll").checked;
+        const duration = smooth ? 250 : 80;
+        await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, duration);
+      } catch (error) {
+        log(error.message || String(error));
+      }
+    }
+
+    setTimeout(() => {
+      isScrolling = false;
+    }, 50);
+  }, 50);
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════
+// UI event listeners
+// ═══════════════════════════════════════════════════════
 
 $("connectBtn2").addEventListener("click", async () => {
   const ip = $("wirelessIp").value || "192.168.1.100";
@@ -568,89 +758,6 @@ $("sendText").addEventListener("click", async () => {
   log(`text "${input.value}"`);
   input.value = "";
 });
-
-let accumulatedDeltaY = 0;
-let isScrolling = false;
-
-canvas.addEventListener("pointerdown", (event) => {
-  const width = state.videoWidth;
-  if (!width) return;
-  canvas.setPointerCapture(event.pointerId);
-  state.dragStart = {
-    ...activePoint(event),
-    time: performance.now(),
-  };
-});
-
-canvas.addEventListener("pointerup", async (event) => {
-  const width = state.videoWidth;
-  if (!state.dragStart || !width) return;
-  const end = activePoint(event);
-  const start = state.dragStart;
-  state.dragStart = null;
-  const distance = Math.hypot(end.x - start.x, end.y - start.y);
-  try {
-    if (distance < 12) {
-      await sendTap(end);
-    } else {
-      const overrideVal = Number($("swipeDuration").value);
-      const duration = !isNaN(overrideVal) && overrideVal > 0 ? overrideVal : Math.round(performance.now() - start.time);
-      await sendSwipe(start, end, duration);
-    }
-  } catch (error) {
-    log(error.message);
-  }
-});
-
-canvas.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  const width = state.videoWidth;
-  const height = state.videoHeight;
-  if (!width || !height) return;
-
-  if (accumulatedDeltaY !== 0 && Math.sign(event.deltaY) !== Math.sign(accumulatedDeltaY)) {
-    accumulatedDeltaY = 0;
-  }
-  accumulatedDeltaY += event.deltaY;
-  const pt = activePoint(event);
-
-  if (isScrolling) return;
-  isScrolling = true;
-
-  setTimeout(async () => {
-    const totalDelta = accumulatedDeltaY;
-    accumulatedDeltaY = 0;
-
-    if (Math.abs(totalDelta) < 10) {
-      isScrolling = false;
-      return;
-    }
-
-    const swipeDistance = Math.min(height * 0.4, Math.max(50, Math.abs(totalDelta) * 2));
-    const startY = pt.y;
-    let endY = pt.y;
-
-    if (totalDelta > 0) {
-      endY = Math.round(Math.max(10, startY - swipeDistance));
-    } else {
-      endY = Math.round(Math.min(height - 10, startY + swipeDistance));
-    }
-
-    if (Math.abs(endY - startY) > 10) {
-      try {
-        const smooth = $("smoothScroll").checked;
-        const duration = smooth ? 250 : 80;
-        await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, duration);
-      } catch (error) {
-        log(error.message || String(error));
-      }
-    }
-
-    setTimeout(() => {
-      isScrolling = false;
-    }, 50);
-  }, 50);
-}, { passive: false });
 
 loadDevices()
   .then(() => setStatus("Ready", "Select a device and connect"))

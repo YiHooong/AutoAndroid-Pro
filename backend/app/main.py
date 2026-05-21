@@ -182,12 +182,15 @@ async def scrcpy_ws(
             max_fps=max_fps,
             video_bit_rate=bit_rate,
         )
-        from .scrcpy import get_broadcaster
+        from .scrcpy import get_broadcaster, send_touch_control
         broadcaster = await get_broadcaster(device)
         await broadcaster.subscribe(websocket, options)
         try:
             while True:
-                await websocket.receive_bytes()
+                # Receive binary control messages (touch events) from the browser
+                data = await websocket.receive_bytes()
+                if data and len(data) > 0:
+                    await send_touch_control(device, data)
         except WebSocketDisconnect:
             pass
         finally:
