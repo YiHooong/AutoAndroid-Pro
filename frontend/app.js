@@ -46,6 +46,25 @@ const TRANSLATIONS = {
     placeholderText: "输入文本发送到手机...",
     emptyStateText: "当前无活跃画面流",
     titleLog: "运行日志",
+    shellBtn: "命令行",
+    shellTitle: "ADB 命令行控制台",
+    shellActiveDevice: "当前设备：",
+    shellExecute: "执行",
+    shellClear: "清空",
+    shellPlaceholder: "输入 ADB 或 Shell 命令 (如: pm list packages -3 或 adb devices)...",
+    shellWelcome: "========================================\n欢迎使用 AutoAndroid Pro 智能命令终端。\n当前设备: {serial}\n========================================\n提示: 终端支持智能命令解析。您可以直接输入 `getprop ro.product.model` (默认执行 adb shell)，也可以输入完整的 `adb shell getprop ro.product.model` 或 `adb devices` 等主机指令，系统将自动识别并执行。\n",
+    aiSettingsBtnText: "配置 AI 助手",
+    aiTitle: "AI 助手参数配置",
+    aiLabelProvider: "选择服务商:",
+    aiLabelEndpoint: "接口地址 (API Endpoint URL):",
+    aiLabelKey: "接口密钥 (API Key / Token):",
+    aiLabelModel: "默认模型名称 (Model Name):",
+    aiLabelVersion: "Anthropic 版本协议头 (Version Header):",
+    aiBtnTest: "测试连接",
+    aiBtnSave: "保存配置",
+    settingsTitle: "AutoAndroid Pro 参数设置",
+    settingsGeneralTab: "通用设置",
+    settingsAiTab: "AI 配置",
   },
   en: {
     titleDevices: "Devices",
@@ -74,6 +93,25 @@ const TRANSLATIONS = {
     placeholderText: "Type text...",
     emptyStateText: "No active stream",
     titleLog: "Activity Log",
+    shellBtn: "Shell",
+    shellTitle: "ADB Command Terminal",
+    shellActiveDevice: "Active Device:",
+    shellExecute: "Execute",
+    shellClear: "Clear",
+    shellPlaceholder: "Enter ADB or Shell command (e.g., pm list packages -3 or adb devices)...",
+    shellWelcome: "========================================\nWelcome to AutoAndroid Pro Command Terminal.\nActive Device: {serial}\n========================================\nTip: The terminal supports intelligent parsing. You can enter `getprop ro.product.model` (runs adb shell ro.product.model), or full commands like `adb shell getprop ro.product.model` or `adb devices`, and the system will automatically execute them.\n",
+    aiSettingsBtnText: "Configure AI",
+    aiTitle: "AI Configuration",
+    aiLabelProvider: "Select Provider:",
+    aiLabelEndpoint: "API Base Endpoint URL:",
+    aiLabelKey: "API Key:",
+    aiLabelModel: "Model Name:",
+    aiLabelVersion: "Anthropic Version Header:",
+    aiBtnTest: "Test Connection",
+    aiBtnSave: "Save Settings",
+    settingsTitle: "AutoAndroid Pro Settings",
+    settingsGeneralTab: "General Settings",
+    settingsAiTab: "AI Configuration",
   }
 };
 
@@ -92,6 +130,7 @@ function applyLanguage(lang) {
     }
   });
   $("textInput").placeholder = dict.placeholderText;
+  $("shellCommandInput").placeholder = dict.shellPlaceholder;
   localStorage.setItem("language", lang);
 }
 
@@ -178,11 +217,7 @@ async function loadDevices() {
   }
   if (state.devices.length) {
     state.selected = select.value || state.devices[0].serial;
-    const current = state.devices.find((device) => device.serial === state.selected);
-    $("deviceMeta").textContent = current?.product || current?.model || current?.state || "device";
     await updateDeviceResolution();
-  } else {
-    $("deviceMeta").textContent = "No authorized devices found";
   }
 }
 
@@ -412,7 +447,20 @@ function connectStream() {
   state.ws = ws;
 
   ws.onopen = () => {
-    setStatus("Streaming", serial);
+    const dev = state.devices.find(d => d.serial === serial);
+    let detail = serial;
+    if (dev) {
+      const model = dev.model || "";
+      const product = dev.product || "";
+      if (model && product) {
+        detail = `${serial} / ${model}(${product})`;
+      } else if (model) {
+        detail = `${serial} / ${model}`;
+      } else if (product) {
+        detail = `${serial} / ${product}`;
+      }
+    }
+    setStatus("Streaming", detail);
     emptyState.style.display = "none";
     log(`stream connected: ${serial}`);
     btn.disabled = false;
@@ -443,20 +491,31 @@ function connectStream() {
 // ═══════════════════════════════════════════════════════
 // Real-time touch control via scrcpy control protocol
 // Inspired by ws-scrcpy's FeaturedInteractionHandler
-// Binary format: TYPE(1) + ACTION(1) + POINTER_ID(8) + X(4) + Y(4) + W(2) + H(2) + PRESSURE(2) + BUTTONS(4) = 28 bytes
+//
+// scrcpy v1.25 wire format (from control_msg.c):
+//   INJECT_TOUCH_EVENT (type=2): 28 bytes
+//     type(1) + action(1) + pointerId(8) + x(4) + y(4) + w(2) + h(2) + pressure(2) + buttons(4)
+//   BACK_OR_SCREEN_ON (type=4): 2 bytes
+//     type(1) + action(1)
+//   INJECT_KEYCODE (type=0): 14 bytes
+//     type(1) + action(1) + keycode(4) + repeat(4) + metaState(4)
 // ═══════════════════════════════════════════════════════
 
 const SCRCPY_CONTROL = {
-  TYPE_TOUCH: 2,
+  TYPE_INJECT_KEYCODE: 0,
+  TYPE_INJECT_TOUCH_EVENT: 2,
+  TYPE_BACK_OR_SCREEN_ON: 4,
   ACTION_DOWN: 0,
   ACTION_UP: 1,
   ACTION_MOVE: 2,
   BUTTON_PRIMARY: 1,       // left click
-  BUTTON_SECONDARY: 2,     // right click (back)
+  BUTTON_SECONDARY: 2,     // right click
   BUTTON_TERTIARY: 4,      // middle click
   MAX_PRESSURE: 0xFFFF,
-  TYPE_BACK_OR_SCREEN_ON: 4,   // inject keycode
   KEYCODE_BACK: 4,
+  KEYCODE_HOME: 3,
+  KEYCODE_APP_SWITCH: 187,
+  KEYCODE_POWER: 26,
 };
 
 function activePoint(event) {
@@ -485,30 +544,37 @@ function activePoint(event) {
 }
 
 function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons) {
-  // scrcpy inject_touch_event binary format (28 bytes total):
-  // type:1 action:1 pointerId:8 x:4 y:4 screenW:2 screenH:2 pressure:2 buttons:4
+  // scrcpy v1.25 inject_touch_event: 28 bytes total
   const buf = new ArrayBuffer(28);
   const view = new DataView(buf);
-  let offset = 0;
-  view.setUint8(offset, SCRCPY_CONTROL.TYPE_TOUCH); offset += 1;
-  view.setUint8(offset, action); offset += 1;
-  // pointerId is long (8 bytes) — upper 4 bytes zero, lower 4 bytes = id
-  view.setUint32(offset, 0); offset += 4;
-  view.setUint32(offset, pointerId); offset += 4;
-  view.setUint32(offset, x); offset += 4;
-  view.setUint32(offset, y); offset += 4;
-  view.setUint16(offset, screenW); offset += 2;
-  view.setUint16(offset, screenH); offset += 2;
-  view.setUint16(offset, pressure); offset += 2;
-  view.setUint32(offset, buttons); offset += 4;
+  view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_TOUCH_EVENT);
+  view.setUint8(1, action);
+  // pointerId is uint64 (8 bytes) — we always use small IDs like ws-scrcpy
+  view.setUint32(2, 0);           // upper 4 bytes
+  view.setUint32(6, pointerId);   // lower 4 bytes
+  view.setUint32(10, x);
+  view.setUint32(14, y);
+  view.setUint16(18, screenW);
+  view.setUint16(20, screenH);
+  view.setUint16(22, pressure);
+  view.setUint32(24, buttons);
+  return buf;
+}
+
+function buildBackOrScreenOn(action) {
+  // scrcpy v1.25 BACK_OR_SCREEN_ON: 2 bytes total
+  const buf = new ArrayBuffer(2);
+  const view = new DataView(buf);
+  view.setUint8(0, SCRCPY_CONTROL.TYPE_BACK_OR_SCREEN_ON);
+  view.setUint8(1, action);  // 0=DOWN, 1=UP
   return buf;
 }
 
 function buildKeyEventMessage(action, keycode) {
-  // scrcpy inject_keycode: type:1 action:1 keycode:4 repeat:4 metaState:4 = 14 bytes
+  // scrcpy v1.25 inject_keycode: 14 bytes total
   const buf = new ArrayBuffer(14);
   const view = new DataView(buf);
-  view.setUint8(0, SCRCPY_CONTROL.TYPE_BACK_OR_SCREEN_ON);
+  view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_KEYCODE);
   view.setUint8(1, action);  // 0=DOWN, 1=UP
   view.setUint32(2, keycode);
   view.setUint32(6, 0);   // repeat
@@ -516,20 +582,17 @@ function buildKeyEventMessage(action, keycode) {
   return buf;
 }
 
-function sendTouch(action, event, pointerId = 0) {
+function sendTouch(action, x, y, pressure, buttons) {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-  const pt = activePoint(event);
   const screenW = state.videoWidth;
   const screenH = state.videoHeight;
   if (!screenW || !screenH) return;
-
-  const pressure = action === SCRCPY_CONTROL.ACTION_UP ? 0 : SCRCPY_CONTROL.MAX_PRESSURE;
-  const buttons = event.button === 2 ? SCRCPY_CONTROL.BUTTON_SECONDARY : SCRCPY_CONTROL.BUTTON_PRIMARY;
-  const msg = buildTouchMessage(action, pointerId, pt.x, pt.y, screenW, screenH, pressure, buttons);
+  // Always use pointerId=0 for single-pointer mouse (same as ws-scrcpy)
+  const msg = buildTouchMessage(action, 0, x, y, screenW, screenH, pressure, buttons);
   state.ws.send(msg);
 }
 
-// Fallback HTTP-based tap/swipe for non-realtime operations
+// Fallback HTTP-based tap/swipe for non-realtime operations (scroll wheel uses this)
 async function sendTap(point) {
   const serial = $("deviceSelect").value;
   await api(`/api/devices/${encodeURIComponent(serial)}/tap`, {
@@ -562,59 +625,60 @@ async function sendSwipe(start, end, durationMs) {
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 canvas.addEventListener("pointerdown", (event) => {
-  const width = state.videoWidth;
-  if (!width) return;
+  if (!state.videoWidth) return;
   event.preventDefault();
-  canvas.setPointerCapture(event.pointerId);
 
-  // Right-click → send BACK key
+  // Right-click → BACK_OR_SCREEN_ON (2 bytes, type=4)
   if (event.button === 2) {
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(buildKeyEventMessage(0, SCRCPY_CONTROL.KEYCODE_BACK)); // DOWN
-      state.ws.send(buildKeyEventMessage(1, SCRCPY_CONTROL.KEYCODE_BACK)); // UP
+      state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_DOWN));
+      state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_UP));
       log("key BACK (right-click)");
     }
-    return;
+    return;  // Don't set dragStart, don't capture pointer
   }
 
-  // Left-click / touch → real-time ACTION_DOWN
-  sendTouch(SCRCPY_CONTROL.ACTION_DOWN, event, event.pointerId);
+  // Left-click / touch — capture and send ACTION_DOWN
+  canvas.setPointerCapture(event.pointerId);
+  const pt = activePoint(event);
+  sendTouch(SCRCPY_CONTROL.ACTION_DOWN, pt.x, pt.y, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
   state.dragStart = {
-    ...activePoint(event),
+    x: pt.x,
+    y: pt.y,
     time: performance.now(),
-    pointerId: event.pointerId,
+    button: SCRCPY_CONTROL.BUTTON_PRIMARY,
   };
 });
 
 canvas.addEventListener("pointermove", (event) => {
   if (!state.dragStart) return;
-  // Real-time ACTION_MOVE — this is the key difference from our old approach
-  // The Android device sees the finger drag in real-time
-  sendTouch(SCRCPY_CONTROL.ACTION_MOVE, event, event.pointerId);
+  const pt = activePoint(event);
+  // Use the button stored from pointerdown, NOT event.button (which is 0 during move)
+  sendTouch(SCRCPY_CONTROL.ACTION_MOVE, pt.x, pt.y, SCRCPY_CONTROL.MAX_PRESSURE, state.dragStart.button);
 });
 
 canvas.addEventListener("pointerup", (event) => {
-  if (event.button === 2) return; // right-click handled in pointerdown
+  if (event.button === 2) return; // right-click not tracked in dragStart
   if (!state.dragStart) return;
 
-  // Send ACTION_UP
-  sendTouch(SCRCPY_CONTROL.ACTION_UP, event, event.pointerId);
+  const pt = activePoint(event);
+  sendTouch(SCRCPY_CONTROL.ACTION_UP, pt.x, pt.y, 0, state.dragStart.button);
 
-  const end = activePoint(event);
   const start = state.dragStart;
   state.dragStart = null;
 
-  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  const distance = Math.hypot(pt.x - start.x, pt.y - start.y);
   if (distance < 12) {
-    log(`tap ${end.x}, ${end.y}`);
+    log(`tap ${pt.x}, ${pt.y}`);
   } else {
-    log(`drag ${start.x},${start.y} -> ${end.x},${end.y}`);
+    log(`drag ${start.x},${start.y} -> ${pt.x},${pt.y}`);
   }
 });
 
 canvas.addEventListener("pointercancel", (event) => {
   if (state.dragStart) {
-    sendTouch(SCRCPY_CONTROL.ACTION_UP, event, event.pointerId);
+    const pt = activePoint(event);
+    sendTouch(SCRCPY_CONTROL.ACTION_UP, pt.x, pt.y, 0, state.dragStart.button);
     state.dragStart = null;
   }
 });
@@ -766,17 +830,7 @@ loadDevices()
     log(error.message);
   });
 
-$("toggleSettingsBtn").addEventListener("click", () => {
-  const panel = $("interactiveSettings");
-  const arrow = $("settingsArrow");
-  if (panel.style.display === "none") {
-    panel.style.display = "flex";
-    arrow.style.transform = "rotate(180deg)";
-  } else {
-    panel.style.display = "none";
-    arrow.style.transform = "rotate(0deg)";
-  }
-});
+
 
 $("languageSelect").addEventListener("change", (e) => {
   applyLanguage(e.target.value);
@@ -786,3 +840,333 @@ $("languageSelect").addEventListener("change", (e) => {
 const activeLanguage = localStorage.getItem("language") || "zh";
 $("languageSelect").value = activeLanguage;
 applyLanguage(activeLanguage);
+
+// ═══════════════════════════════════════════════════════
+// ADB Shell Modal Logic
+// ═══════════════════════════════════════════════════════
+const shellModal = $("shellModal");
+const shellOutput = $("shellOutput");
+const shellCommandInput = $("shellCommandInput");
+const shellTargetDevice = $("shellTargetDevice");
+
+let lastShellDevice = "";
+
+$("shellBtn").addEventListener("click", () => {
+  const serial = $("deviceSelect").value;
+  if (!serial) {
+    alert("Please connect/select a device first.");
+    return;
+  }
+  shellTargetDevice.textContent = serial;
+  if (serial !== lastShellDevice) {
+    lastShellDevice = serial;
+    const currentLang = localStorage.getItem("language") || "zh";
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.zh;
+    const welcomeMsg = dict.shellWelcome.replace("{serial}", serial);
+    if (shellOutput.textContent.trim() === "") {
+      shellOutput.textContent = welcomeMsg;
+    } else {
+      shellOutput.textContent += `\n${welcomeMsg}`;
+    }
+  }
+  shellModal.style.display = "flex";
+  shellCommandInput.value = "";
+  setTimeout(() => {
+    shellCommandInput.focus();
+    shellOutput.scrollTop = shellOutput.scrollHeight;
+  }, 100);
+});
+
+$("closeShellModal").addEventListener("click", () => {
+  shellModal.style.display = "none";
+});
+
+shellModal.addEventListener("click", (e) => {
+  if (e.target === shellModal) {
+    shellModal.style.display = "none";
+  }
+});
+
+const shellHistory = [];
+let shellHistoryIdx = -1;
+let shellTempCmd = "";
+
+async function executeShellCommand() {
+  const serial = $("deviceSelect").value;
+  const command = shellCommandInput.value.trim();
+  if (!command || !serial) return;
+
+  // Handle local clear command
+  if (command.toLowerCase() === "clear") {
+    shellOutput.textContent = "";
+    shellCommandInput.value = "";
+    if (shellHistory[shellHistory.length - 1] !== command) {
+      shellHistory.push(command);
+    }
+    shellHistoryIdx = -1;
+    return;
+  }
+
+  // Push to history
+  if (shellHistory[shellHistory.length - 1] !== command) {
+    shellHistory.push(command);
+  }
+  shellHistoryIdx = -1;
+
+  let logCmd = command;
+  if (logCmd.startsWith("adb shell ")) {
+    logCmd = `$ ${logCmd}`;
+  } else if (logCmd.startsWith("adb ")) {
+    logCmd = `$ ${logCmd}`;
+  } else {
+    logCmd = `$ adb shell ${logCmd}`;
+  }
+  shellOutput.textContent += `\n\n${logCmd}\n`;
+  shellOutput.scrollTop = shellOutput.scrollHeight;
+  shellCommandInput.value = "";
+  shellCommandInput.disabled = true;
+  $("runShellCmdBtn").disabled = true;
+
+  try {
+    const res = await api(`/api/devices/${encodeURIComponent(serial)}/shell`, {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    });
+    shellOutput.textContent += res.output || "(No output)\n";
+  } catch (error) {
+    shellOutput.textContent += `Error: ${error.message}\n`;
+  } finally {
+    shellCommandInput.disabled = false;
+    $("runShellCmdBtn").disabled = false;
+    shellCommandInput.focus();
+    shellOutput.scrollTop = shellOutput.scrollHeight;
+  }
+}
+
+$("runShellCmdBtn").addEventListener("click", executeShellCommand);
+$("clearShellBtn").addEventListener("click", () => {
+  shellOutput.textContent = "";
+  shellCommandInput.value = "";
+  shellCommandInput.focus();
+});
+
+shellCommandInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    executeShellCommand();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (shellHistory.length === 0) return;
+    if (shellHistoryIdx === -1) {
+      shellTempCmd = shellCommandInput.value;
+      shellHistoryIdx = shellHistory.length - 1;
+    } else if (shellHistoryIdx > 0) {
+      shellHistoryIdx--;
+    }
+    shellCommandInput.value = shellHistory[shellHistoryIdx];
+    setTimeout(() => {
+      shellCommandInput.selectionStart = shellCommandInput.selectionEnd = shellCommandInput.value.length;
+    }, 0);
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (shellHistoryIdx === -1) return;
+    if (shellHistoryIdx < shellHistory.length - 1) {
+      shellHistoryIdx++;
+      shellCommandInput.value = shellHistory[shellHistoryIdx];
+    } else {
+      shellHistoryIdx = -1;
+      shellCommandInput.value = shellTempCmd;
+    }
+  }
+});
+
+// Global Settings Modal Logic
+const settingsModal = $("settingsModal");
+const globalSettingsBtn = $("globalSettingsBtn");
+const closeSettingsModal = $("closeSettingsModal");
+const tabGeneralBtn = $("tabGeneralBtn");
+const tabAiBtn = $("tabAiBtn");
+const paneGeneral = $("paneGeneral");
+const paneAi = $("paneAi");
+const settingsStatusArea = $("settingsStatusArea");
+
+// Inputs
+const languageSelect = $("languageSelect");
+const swipeDuration = $("swipeDuration");
+const smoothScroll = $("smoothScroll");
+const aiEndpoint = $("aiEndpoint");
+const aiKey = $("aiKey");
+const aiModelName = $("aiModelName");
+const aiVersion = $("aiVersion");
+const aiAnthropicExtraGroup = $("aiAnthropicExtraGroup");
+
+let activeProvider = "openai";
+let activeSettingsTab = "general";
+
+function setSettingsTab(tab) {
+  activeSettingsTab = tab;
+  if (tab === "general") {
+    tabGeneralBtn.style.background = "#00ff66";
+    tabGeneralBtn.style.color = "#0b0d0f";
+    tabAiBtn.style.background = "transparent";
+    tabAiBtn.style.color = "#aab2b9";
+    paneGeneral.style.display = "flex";
+    paneAi.style.display = "none";
+  } else {
+    tabAiBtn.style.background = "#00ff66";
+    tabAiBtn.style.color = "#0b0d0f";
+    tabGeneralBtn.style.background = "transparent";
+    tabGeneralBtn.style.color = "#aab2b9";
+    paneGeneral.style.display = "none";
+    paneAi.style.display = "flex";
+  }
+}
+
+tabGeneralBtn.addEventListener("click", () => setSettingsTab("general"));
+tabAiBtn.addEventListener("click", () => setSettingsTab("ai"));
+
+function setProvider(provider) {
+  activeProvider = provider;
+  if (provider === "openai") {
+    $("providerOpenAiBtn").style.background = "#00ff66";
+    $("providerOpenAiBtn").style.color = "#0b0d0f";
+    $("providerAnthropicBtn").style.background = "transparent";
+    $("providerAnthropicBtn").style.color = "#aab2b9";
+    aiEndpoint.placeholder = "https://api.openai.com/v1";
+    aiModelName.placeholder = "gpt-4o";
+    aiAnthropicExtraGroup.style.display = "none";
+  } else {
+    $("providerAnthropicBtn").style.background = "#00ff66";
+    $("providerAnthropicBtn").style.color = "#0b0d0f";
+    $("providerOpenAiBtn").style.background = "transparent";
+    $("providerOpenAiBtn").style.color = "#aab2b9";
+    aiEndpoint.placeholder = "https://api.anthropic.com/v1";
+    aiModelName.placeholder = "claude-3-5-sonnet-20241022";
+    aiAnthropicExtraGroup.style.display = "flex";
+  }
+  settingsStatusArea.style.display = "none";
+}
+
+$("providerOpenAiBtn").addEventListener("click", () => setProvider("openai"));
+$("providerAnthropicBtn").addEventListener("click", () => setProvider("anthropic"));
+
+function loadAllSettings() {
+  // Load General Settings
+  const lang = localStorage.getItem("language") || "zh";
+  languageSelect.value = lang;
+  
+  swipeDuration.value = localStorage.getItem("swipe_duration") || "";
+  smoothScroll.checked = localStorage.getItem("smooth_scroll") !== "false";
+
+  // Load AI Settings
+  const provider = localStorage.getItem("ai_provider") || "openai";
+  setProvider(provider);
+  aiEndpoint.value = localStorage.getItem("ai_endpoint") || "";
+  aiKey.value = localStorage.getItem("ai_key") || "";
+  aiModelName.value = localStorage.getItem("ai_model_name") || "";
+  aiVersion.value = localStorage.getItem("ai_version") || "2023-06-01";
+  
+  settingsStatusArea.style.display = "none";
+}
+
+// Initial page load triggers
+loadAllSettings();
+
+globalSettingsBtn.addEventListener("click", () => {
+  loadAllSettings();
+  setSettingsTab("general");
+  settingsModal.style.display = "flex";
+});
+
+closeSettingsModal.addEventListener("click", () => {
+  settingsModal.style.display = "none";
+});
+
+settingsModal.addEventListener("click", (e) => {
+  if (e.target === settingsModal) {
+    settingsModal.style.display = "none";
+  }
+});
+
+// Test Connection Action
+$("testAiConnectionBtn").addEventListener("click", async () => {
+  settingsStatusArea.style.display = "block";
+  settingsStatusArea.style.background = "rgba(255,255,255,0.03)";
+  settingsStatusArea.style.border = "1px solid rgba(255,255,255,0.08)";
+  settingsStatusArea.style.color = "#e6ebf1";
+  settingsStatusArea.textContent = "Testing connection / 正在测试连接...";
+
+  const provider = activeProvider;
+  const endpoint = aiEndpoint.value.trim() || aiEndpoint.placeholder;
+  const api_key = aiKey.value.trim();
+  const model_name = aiModelName.value.trim() || aiModelName.placeholder;
+  const anthropic_version = aiVersion.value.trim() || "2023-06-01";
+
+  if (!api_key) {
+    settingsStatusArea.style.background = "rgba(255, 59, 48, 0.1)";
+    settingsStatusArea.style.border = "1px solid rgba(255, 59, 48, 0.2)";
+    settingsStatusArea.style.color = "#ff3b30";
+    settingsStatusArea.textContent = "Error: API Key is required / 错误：密钥不能为空！";
+    return;
+  }
+
+  try {
+    const res = await api("/api/ai/test", {
+      method: "POST",
+      body: JSON.stringify({
+        provider,
+        endpoint,
+        api_key,
+        model_name,
+        anthropic_version
+      })
+    });
+
+    if (res.ok) {
+      settingsStatusArea.style.background = "rgba(0, 255, 102, 0.1)";
+      settingsStatusArea.style.border = "1px solid rgba(0, 255, 102, 0.2)";
+      settingsStatusArea.style.color = "#00ff66";
+      settingsStatusArea.textContent = `Success / 连接测试成功！\n\nResponse:\n${res.message}`;
+    } else {
+      settingsStatusArea.style.background = "rgba(255, 59, 48, 0.1)";
+      settingsStatusArea.style.border = "1px solid rgba(255, 59, 48, 0.2)";
+      settingsStatusArea.style.color = "#ff3b30";
+      const detailStr = typeof res.detail === "object" ? JSON.stringify(res.detail, null, 2) : res.detail || "";
+      settingsStatusArea.textContent = `Error / 连接测试失败！\n\nDetail:\n${res.error}\n${detailStr}`;
+    }
+  } catch (err) {
+    settingsStatusArea.style.background = "rgba(255, 59, 48, 0.1)";
+    settingsStatusArea.style.border = "1px solid rgba(255, 59, 48, 0.2)";
+    settingsStatusArea.style.color = "#ff3b30";
+    settingsStatusArea.textContent = `Error / 请求失败！\n\nDetail:\n${err.message}`;
+  }
+});
+
+// Save Settings Action
+$("saveSettingsBtn").addEventListener("click", () => {
+  // Save General settings
+  const selectedLang = languageSelect.value;
+  localStorage.setItem("language", selectedLang);
+  applyLanguage(selectedLang);
+  
+  localStorage.setItem("swipe_duration", swipeDuration.value.trim());
+  localStorage.setItem("smooth_scroll", smoothScroll.checked ? "true" : "false");
+
+  // Save AI settings
+  localStorage.setItem("ai_provider", activeProvider);
+  localStorage.setItem("ai_endpoint", aiEndpoint.value.trim());
+  localStorage.setItem("ai_key", aiKey.value.trim());
+  localStorage.setItem("ai_model_name", aiModelName.value.trim());
+  localStorage.setItem("ai_version", aiVersion.value.trim());
+
+  settingsStatusArea.style.display = "block";
+  settingsStatusArea.style.background = "rgba(0, 255, 102, 0.1)";
+  settingsStatusArea.style.border = "1px solid rgba(0, 255, 102, 0.2)";
+  settingsStatusArea.style.color = "#00ff66";
+  settingsStatusArea.textContent = "Settings saved successfully! / 配置已保存成功！";
+
+  setTimeout(() => {
+    settingsModal.style.display = "none";
+  }, 1200);
+});
+

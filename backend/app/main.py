@@ -40,6 +40,10 @@ class KeyPayload(BaseModel):
     key: str | int
 
 
+class ShellPayload(BaseModel):
+    command: str
+
+
 class ConnectPayload(BaseModel):
     address: str = Field(description="host:port, e.g. 192.168.1.100:5555")
 
@@ -164,6 +168,121 @@ def keyevent(serial: str, payload: KeyPayload):
         return {"ok": True}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/devices/{serial}/shell")
+def run_device_shell(serial: str, payload: ShellPayload):
+    try:
+        cmd_str = payload.command.strip()
+        # 1. If it starts with "adb shell ", strip it and run as a shell command
+        if cmd_str.startswith("adb shell "):
+            sub_cmd = cmd_str[10:].strip()
+            output = adb.shell(serial, sub_cmd)
+        # 2. If it starts with other "adb " command, strip and run as general adb command
+        elif cmd_str.startswith("adb "):
+            import shlex
+            parts = shlex.split(cmd_str[4:].strip())
+            # Inject serial if not manually specified in the adb arguments
+            if "-s" not in parts:
+                output = adb.run_adb(parts, serial=serial)
+            else:
+                output = adb.run_adb(parts)
+        # 3. Default to running it as a shell command directly on the device
+        else:
+            output = adb.shell(serial, cmd_str)
+            
+        return {"ok": True, "output": output}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class AiTestPayload(BaseModel):
+    provider: str
+    endpoint: str
+    api_key: str
+    model_name: str
+    anthropic_version: str | None = None
+
+
+@app.post("/api/ai/test")
+def test_ai_connection(payload: AiTestPayload):
+    import json
+    import urllib.request
+    import urllib.error
+
+    provider = payload.provider.lower()
+    endpoint = payload.endpoint.strip()
+    api_key = payload.api_key.strip()
+    model_name = payload.model_name.strip()
+    
+    # 1. Format the endpoint
+    if provider == "openai":
+        if not (endpoint.endswith("/chat/completions") or endpoint.endswith("/chat/completions/")):
+            endpoint = endpoint.rstrip("/")
+            if not endpoint.endswith("/v1"):
+                endpoint = f"{endpoint}/v1"
+            endpoint = f"{endpoint}/chat/completions"
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "AutoAndroidPro/1.0"
+        }
+        body = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 10
+        }
+    else:  # anthropic
+        if not (endpoint.endswith("/messages") or endpoint.endswith("/messages/")):
+            endpoint = endpoint.rstrip("/")
+            if not endpoint.endswith("/v1"):
+                endpoint = f"{endpoint}/v1"
+            endpoint = f"{endpoint}/messages"
+            
+        version = payload.anthropic_version or "2023-06-01"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": version,
+            "Content-Type": "application/json",
+            "User-Agent": "AutoAndroidPro/1.0"
+        }
+        body = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 10
+        }
+        
+    # 2. Perform request
+    try:
+        data = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
+        
+        # Add a timeout of 12 seconds to avoid hanging
+        with urllib.request.urlopen(req, timeout=12) as response:
+            resp_body = response.read().decode("utf-8")
+            resp_json = json.loads(resp_body)
+            
+            message_text = "Connection test succeeded!"
+            if provider == "openai":
+                if "choices" in resp_json and len(resp_json["choices"]) > 0:
+                    msg = resp_json["choices"][0].get("message", {})
+                    message_text = msg.get("content", "Success!")
+            else:  # anthropic
+                if "content" in resp_json and len(resp_json["content"]) > 0:
+                    message_text = resp_json["content"][0].get("text", "Success!")
+                    
+            return {"ok": True, "message": message_text, "raw": resp_json}
+            
+    except urllib.error.HTTPError as err:
+        try:
+            err_body = err.read().decode("utf-8")
+            err_json = json.loads(err_body)
+        except Exception:
+            err_json = err_body if 'err_body' in locals() else str(err)
+        return {"ok": False, "error": f"HTTP Error {err.code}: {err.reason}", "detail": err_json}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 @app.websocket("/ws/scrcpy")
