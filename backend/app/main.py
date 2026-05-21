@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -152,17 +153,17 @@ async def scrcpy_ws(
             max_fps=max_fps,
             video_bit_rate=bit_rate,
         )
-        count = 0
-        from .scrcpy import stream_h264_chunks
-        async for chunk in stream_h264_chunks(device, options):
-            count += 1
-            if count <= 3:
-                print(f"[scrcpy] chunk {count}: {len(chunk)} bytes, first 8: {chunk[:8].hex()}")
-            await websocket.send_bytes(chunk)
-        print(f"[scrcpy] stream ended after {count} chunks")
-    except WebSocketDisconnect:
-        print("[scrcpy] client disconnected")
-        return
+        from .scrcpy import get_broadcaster
+        broadcaster = await get_broadcaster(device)
+        await broadcaster.subscribe(websocket, options)
+        try:
+            while True:
+                await websocket.receive_bytes()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await broadcaster.unsubscribe(websocket)
     except Exception as exc:
         print(f"[scrcpy] ERROR: {type(exc).__name__}: {exc}")
-        await websocket.close(code=1011, reason=str(exc)[:120])
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011, reason=str(exc)[:120])

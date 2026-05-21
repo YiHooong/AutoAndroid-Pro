@@ -141,12 +141,15 @@ class ScrcpySession:
                 "audio=false",
                 "send_codec_meta=false",
                 f"video_bit_rate={bit_rate}",
+                "video_codec_options=i-frame-interval=2",
             ]
         else:
             option_pairs += [
                 "send_frame_meta=false",
                 f"bit_rate={bit_rate}",
+                "codec_options=i-frame-interval=2",
             ]
+
         command = (
             f"CLASSPATH={DEVICE_SERVER_PATH} app_process / "
             f"com.genymobile.scrcpy.Server {self.version} {' '.join(option_pairs)}"
@@ -290,6 +293,71 @@ async def stream_mp4_chunks(serial: str, options: StreamOptions):
 
 ACTIVE_SESSIONS: dict[str, ScrcpySession] = {}
 SESSION_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+from fastapi import WebSocket
+
+class DeviceStreamBroadcaster:
+    def __init__(self, serial: str) -> None:
+        self.serial = serial
+        self.subscribers: set[WebSocket] = set()
+        self.read_task: asyncio.Task | None = None
+        self.cached_header: bytes | None = None
+        self.lock = asyncio.Lock()
+
+    async def subscribe(self, websocket: WebSocket, options: StreamOptions) -> None:
+        async with self.lock:
+            if self.cached_header:
+                await websocket.send_bytes(self.cached_header)
+            
+            self.subscribers.add(websocket)
+            
+            if self.read_task is None:
+                self.read_task = asyncio.create_task(self._read_loop(options))
+
+    async def unsubscribe(self, websocket: WebSocket) -> None:
+        async with self.lock:
+            self.subscribers.discard(websocket)
+            if not self.subscribers and self.read_task:
+                self.read_task.cancel()
+                self.read_task = None
+                self.cached_header = None
+
+    async def _read_loop(self, options: StreamOptions) -> None:
+        try:
+            async for chunk in stream_h264_chunks(self.serial, options):
+                if self.cached_header is None:
+                    self.cached_header = chunk
+                await self._broadcast(chunk)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[Broadcaster {self.serial}] Error in read loop: {e}")
+        finally:
+            async with self.lock:
+                self.read_task = None
+                self.cached_header = None
+
+    async def _broadcast(self, chunk: bytes) -> None:
+        async def safe_send(ws: WebSocket):
+            try:
+                await ws.send_bytes(chunk)
+            except Exception:
+                await self.unsubscribe(ws)
+
+        for ws in list(self.subscribers):
+            asyncio.create_task(safe_send(ws))
+
+
+BROADCASTERS: dict[str, DeviceStreamBroadcaster] = {}
+BROADCASTERS_LOCK = asyncio.Lock()
+
+
+async def get_broadcaster(serial: str) -> DeviceStreamBroadcaster:
+    async with BROADCASTERS_LOCK:
+        if serial not in BROADCASTERS:
+            BROADCASTERS[serial] = DeviceStreamBroadcaster(serial)
+        return BROADCASTERS[serial]
 
 
 async def stream_h264_chunks(serial: str, options: StreamOptions):
