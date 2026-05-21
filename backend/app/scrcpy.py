@@ -346,14 +346,14 @@ class DeviceStreamBroadcaster:
                 self.subscribers.clear()
 
     async def _broadcast(self, chunk: bytes) -> None:
-        dead: list[WebSocket] = []
-        for ws in list(self.subscribers):
+        async def safe_send(ws: WebSocket):
             try:
                 await ws.send_bytes(chunk)
             except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.subscribers.discard(ws)
+                await self.unsubscribe(ws)
+
+        if self.subscribers:
+            await asyncio.gather(*(safe_send(ws) for ws in list(self.subscribers)), return_exceptions=True)
 
 
 BROADCASTERS: dict[str, DeviceStreamBroadcaster] = {}

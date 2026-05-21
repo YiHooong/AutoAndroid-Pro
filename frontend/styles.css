@@ -228,7 +228,7 @@ select {
 
 .stream-grid {
   display: grid;
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: 75px 1fr;
   gap: 8px;
 }
 
@@ -387,6 +387,6 @@ button.streaming-active:hover {
   background: rgba(240, 179, 90, 0.15);
   border: 1px solid rgba(240, 179, 90, 0.3);
   border-radius: 6px;
-  font-family: monospace;
+  font-family: inherit;
   vertical-align: middle;
 }

@@ -7,6 +7,8 @@ const state = {
   parser: null,
   videoWidth: 0,
   videoHeight: 0,
+  nativeWidth: 0,
+  nativeHeight: 0,
   // Interaction
   dragStart: null,
   // FPS Tracking
@@ -16,21 +18,91 @@ const state = {
   smoothedFps: 0,
 };
 
+const TRANSLATIONS = {
+  zh: {
+    titleDevices: "设备列表",
+    titleWireless: "无线连接",
+    titleStream: "视频流配置",
+    titleControls: "快捷控制台",
+    titleInteractive: "设置",
+    labelIp: "主机 IP 地址",
+    labelPort: "端口号 (Port)",
+    labelPairCode: "配对码 (Android 11+)",
+    btnPair: "开始配对",
+    btnConnect: "开始连接",
+    labelMaxRes: "最大分辨率上限",
+    labelFps: "帧率",
+    labelBitrate: "视频码率",
+    btnStartStream: "开始推流",
+    btnStopStream: "停止推流",
+    btnKeyBack: "返回键",
+    btnKeyHome: "主页键",
+    btnKeyRecent: "任务键",
+    btnKeyPower: "电源键",
+    btnSendText: "发送",
+    labelSwipeDuration: "自定义滑动耗时 (毫秒)",
+    labelSmoothScroll: "启用鼠标平滑滚动",
+    labelLanguage: "显示语言 / Language",
+    placeholderText: "输入文本发送到手机...",
+    emptyStateText: "当前无活跃画面流",
+    titleLog: "运行日志",
+  },
+  en: {
+    titleDevices: "Devices",
+    titleWireless: "Wireless Connect",
+    titleStream: "Stream Settings",
+    titleControls: "Controls",
+    titleInteractive: "Settings",
+    labelIp: "Host / IP Address",
+    labelPort: "Port",
+    labelPairCode: "Pairing Code (Android 11+)",
+    btnPair: "Pair",
+    btnConnect: "Connect",
+    labelMaxRes: "Max Resolution",
+    labelFps: "FPS",
+    labelBitrate: "Bitrate",
+    btnStartStream: "Start Stream",
+    btnStopStream: "Stop Stream",
+    btnKeyBack: "Back",
+    btnKeyHome: "Home",
+    btnKeyRecent: "Recent",
+    btnKeyPower: "Power",
+    btnSendText: "Send",
+    labelSwipeDuration: "Swipe Duration Override (ms)",
+    labelSmoothScroll: "Smooth Wheel Scroll",
+    labelLanguage: "Language / 语言切换",
+    placeholderText: "Type text...",
+    emptyStateText: "No active stream",
+    titleLog: "Activity Log",
+  }
+};
+
 const $ = (id) => document.getElementById(id);
-const video = $("phoneVideo");
 const canvas = $("phoneCanvas");
 const ctx = canvas.getContext("2d");
 const emptyState = $("emptyState");
 
-const MAX_LOG_ENTRIES = 200;
+function applyLanguage(lang) {
+  const dict = TRANSLATIONS[lang];
+  if (!dict) return;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) {
+      el.textContent = dict[key];
+    }
+  });
+  $("textInput").placeholder = dict.placeholderText;
+  localStorage.setItem("language", lang);
+}
 
 function log(message) {
   const item = document.createElement("li");
   item.textContent = `${new Date().toLocaleTimeString()} ${message}`;
   const container = $("logs");
   container.insertBefore(item, container.firstChild);
-  // Prevent unbounded DOM growth
-  while (container.children.length > MAX_LOG_ENTRIES) {
+  container.scrollTop = 0;
+  // Limit to 200 logs to prevent DOM node leakage and performance degradation
+  while (container.children.length > 200) {
     container.removeChild(container.lastChild);
   }
 }
@@ -58,15 +130,25 @@ async function updateDeviceResolution() {
   if (!serial) return;
   try {
     const res = await api(`/api/devices/${encodeURIComponent(serial)}/wm-size`);
-    const match = res.raw.match(/(\d+)x(\d+)/);
+    let match = res.raw.match(/Override size:\s*(\d+)x(\d+)/i);
+    if (!match) {
+      match = res.raw.match(/Physical size:\s*(\d+)x(\d+)/i);
+    }
+    if (!match) {
+      match = res.raw.match(/(\d+)x(\d+)/);
+    }
     if (match) {
       const w = parseInt(match[1]);
       const h = parseInt(match[2]);
-      const maxDim = Math.min(1920, Math.max(w, h));
+      state.nativeWidth = w;
+      state.nativeHeight = h;
+      const maxDim = Math.max(w, h);
       $("maxSize").value = maxDim;
-      log(`Device resolution loaded: ${w}x${h} (Capped: ${maxDim}px)`);
+      log(`Device resolution loaded: ${w}x${h} (Max: ${maxDim}px)`);
     } else {
       $("maxSize").value = "1280";
+      state.nativeWidth = 0;
+      state.nativeHeight = 0;
     }
   } catch (err) {
     log(`Failed to fetch device resolution: ${err.message}`);
@@ -104,19 +186,14 @@ async function loadDevices() {
   }
 }
 
-// ═══════════════════════════════════════════════════════
-// AnnexB NAL Parser — pre-allocated buffer to avoid
-// per-frame memory allocation and GC pressure
-// ═══════════════════════════════════════════════════════
 class AnnexBParser {
   constructor(onNal) {
     this.onNal = onNal;
-    this.buffer = new Uint8Array(512 * 1024); // Pre-allocate 512KB
+    this.buffer = new Uint8Array(512 * 1024); // Preallocated 512KB ring buffer
     this.length = 0;
   }
 
   append(data) {
-    // Grow only when needed (doubling strategy)
     if (this.length + data.length > this.buffer.length) {
       const newSize = Math.max(this.buffer.length * 2, this.length + data.length);
       const newBuf = new Uint8Array(newSize);
@@ -130,7 +207,6 @@ class AnnexBParser {
     while (true) {
       const nextStart = this.findStartCode(offset + 4);
       if (nextStart === -1) {
-        // Move unconsumed data to the front
         if (offset > 0) {
           this.buffer.copyWithin(0, offset, this.length);
           this.length -= offset;
@@ -143,44 +219,42 @@ class AnnexBParser {
   }
 
   findStartCode(start) {
-    const buf = this.buffer;
     const len = this.length - 4;
     for (let i = start; i <= len; i++) {
-      if (buf[i] === 0 && buf[i + 1] === 0) {
-        if (buf[i + 2] === 1) return i;
-        if (buf[i + 2] === 0 && buf[i + 3] === 1) return i;
+      if (this.buffer[i] === 0 && this.buffer[i + 1] === 0) {
+        if (this.buffer[i + 2] === 1) return i;
+        if (this.buffer[i + 2] === 0 && this.buffer[i + 3] === 1) return i;
       }
     }
     return -1;
   }
 }
 
-// ═══════════════════════════════════════════════════════
-// FPS Counter
-// ═══════════════════════════════════════════════════════
 function startFpsCounter() {
   stopFpsCounter();
-
+  
   const fpsCounter = $("fpsCounter");
   fpsCounter.style.display = "inline-flex";
   fpsCounter.textContent = "0 FPS";
-
+  
   state.frameCount = 0;
   state.lastFpsTime = performance.now();
-  state.smoothedFps = 0;
-
+  
   state.fpsIntervalId = setInterval(() => {
     const now = performance.now();
     const elapsedMs = now - state.lastFpsTime;
     if (elapsedMs <= 0) return;
-
+    
     const currentFrames = state.frameCount;
     state.frameCount = 0;
-
-    const fps = Math.round((currentFrames * 1000) / elapsedMs);
-    const alpha = 0.3;
-    state.smoothedFps = state.smoothedFps ? Math.round(state.smoothedFps * (1 - alpha) + fps * alpha) : fps;
-    fpsCounter.textContent = `${state.smoothedFps} FPS`;
+    
+    const rawFps = Math.round((currentFrames * 1000) / elapsedMs);
+    const targetFps = Number($("maxFps").value) || 120;
+    
+    // Smooth zero presentation when static, capped at target display refresh rate
+    const finalFps = currentFrames > 0 ? Math.min(targetFps, rawFps) : 0;
+    
+    fpsCounter.textContent = `${finalFps} FPS`;
     state.lastFpsTime = now;
   }, 1000);
 }
@@ -193,16 +267,13 @@ function stopFpsCounter() {
   $("fpsCounter").style.display = "none";
 }
 
-// ═══════════════════════════════════════════════════════
-// Stream lifecycle
-// ═══════════════════════════════════════════════════════
 function resetStream() {
   stopFpsCounter();
   if (state.ws) {
     state.ws.close();
     state.ws = null;
   }
-
+  
   if (state.decoder) {
     try {
       state.decoder.close();
@@ -216,11 +287,6 @@ function resetStream() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   canvas.style.display = "none";
   canvas.classList.remove("active");
-
-  video.removeAttribute("src");
-  video.load();
-  video.style.display = "none";
-
   emptyState.style.display = "block";
 
   const btn = $("connectBtn");
@@ -253,82 +319,92 @@ function connectStream() {
     bit_rate: bitRate,
   });
 
-  // Setup WebCodecs + Canvas
-  log("Engine: WebCodecs + Canvas (Hardware Acceleration)");
-  canvas.style.display = "block";
-  canvas.classList.add("active");
-  video.style.display = "none";
+  try {
+    log("Engine: Launching WebCodecs (Hardware Accelerated)...");
+    canvas.style.display = "block";
+    canvas.classList.add("active");
 
-  state.decoder = new VideoDecoder({
-    output(frame) {
-      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-        canvas.width = frame.displayWidth;
-        canvas.height = frame.displayHeight;
-        state.videoWidth = frame.displayWidth;
-        state.videoHeight = frame.displayHeight;
-      }
-      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-      frame.close();
-      state.frameCount++;
-    },
-    error(e) {
-      log(`Decoder error: ${e.message}`);
-      console.error("WebCodecs error:", e);
-    },
-  });
-
-  state.decoder.configure({
-    codec: "avc1.42e01f",
-    optimizeForLatency: true,
-  });
-
-  let hasSeenKeyFrame = false;
-  let pendingSps = null;
-  let pendingPps = null;
-
-  state.parser = new AnnexBParser((nal) => {
-    try {
-      let offset = 0;
-      if (nal[0] === 0 && nal[1] === 0) {
-        if (nal[2] === 1) offset = 3;
-        else if (nal[2] === 0 && nal[3] === 1) offset = 4;
-      }
-      const nalType = nal[offset] & 0x1f;
-
-      if (nalType === 7) { // SPS
-        pendingSps = nal;
-        return;
-      }
-      if (nalType === 8) { // PPS
-        pendingPps = nal;
-        return;
-      }
-
-      if (nalType === 5) { // IDR / Key Frame — stitch SPS+PPS+IDR
-        let combined = nal;
-        if (pendingSps && pendingPps) {
-          combined = new Uint8Array(pendingSps.length + pendingPps.length + nal.length);
-          combined.set(pendingSps, 0);
-          combined.set(pendingPps, pendingSps.length);
-          combined.set(nal, pendingSps.length + pendingPps.length);
+    state.decoder = new VideoDecoder({
+      output(frame) {
+        if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+          state.videoWidth = frame.displayWidth;
+          state.videoHeight = frame.displayHeight;
         }
-        state.decoder?.decode(new EncodedVideoChunk({
-          type: "key",
-          timestamp: performance.now() * 1000,
-          data: combined,
-        }));
-        hasSeenKeyFrame = true;
-      } else if (nalType === 1 && hasSeenKeyFrame) { // Delta Frame
-        state.decoder?.decode(new EncodedVideoChunk({
-          type: "delta",
-          timestamp: performance.now() * 1000,
-          data: nal,
-        }));
+        
+        // Zero-copy highly optimized WebGL/Bitmap rendering path
+        createImageBitmap(frame).then(bitmap => {
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+        });
+        frame.close();
+        state.frameCount++;
+      },
+      error(e) {
+        log(`Decoder runtime error: ${e.message}`);
+        console.error("WebCodecs runtime error:", e);
+        resetStream();
       }
-    } catch (err) {
-      console.error("Frame decoding error:", err);
-    }
-  });
+    });
+
+    state.decoder.configure({
+      codec: "avc1.42e01f",
+      optimizeForLatency: true,
+    });
+
+    let hasSeenKeyFrame = false;
+    let pendingSps = null;
+    let pendingPps = null;
+
+    state.parser = new AnnexBParser((nal) => {
+      try {
+        let offset = 0;
+        if (nal[0] === 0 && nal[1] === 0) {
+          if (nal[2] === 1) offset = 3;
+          else if (nal[2] === 0 && nal[3] === 1) offset = 4;
+        }
+        const nalType = nal[offset] & 0x1f;
+
+        if (nalType === 7) { // SPS
+          pendingSps = nal;
+          return;
+        }
+        if (nalType === 8) { // PPS
+          pendingPps = nal;
+          return;
+        }
+
+        if (nalType === 5) { // IDR / Key Frame
+          let combined = nal;
+          if (pendingSps && pendingPps) {
+            combined = new Uint8Array(pendingSps.length + pendingPps.length + nal.length);
+            combined.set(pendingSps, 0);
+            combined.set(pendingPps, pendingSps.length);
+            combined.set(nal, pendingSps.length + pendingPps.length);
+          }
+          state.decoder?.decode(new EncodedVideoChunk({
+            type: "key",
+            timestamp: performance.now() * 1000,
+            data: combined,
+          }));
+          hasSeenKeyFrame = true;
+        } else if (nalType === 1 && hasSeenKeyFrame) { // Delta Frame
+          state.decoder?.decode(new EncodedVideoChunk({
+            type: "delta",
+            timestamp: performance.now() * 1000,
+            data: nal,
+          }));
+        }
+      } catch (err) {
+        console.error("Frame decoding error:", err);
+      }
+    });
+  } catch (err) {
+    log(`WebCodecs configuration failed: ${err.message}`);
+    resetStream();
+    return;
+  }
 
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${protocol}://${location.host}/ws/scrcpy?${params}`);
@@ -364,16 +440,25 @@ function connectStream() {
   };
 }
 
-// ═══════════════════════════════════════════════════════
-// Pointer / touch interaction
-// ═══════════════════════════════════════════════════════
 function activePoint(event) {
   const rect = canvas.getBoundingClientRect();
   const width = state.videoWidth;
-  const height = state.videoHeight;
   if (!width) return { x: 0, y: 0 };
-  const scaleX = width / rect.width;
-  const scaleY = height / rect.height;
+
+  let targetWidth = state.nativeWidth || state.videoWidth;
+  let targetHeight = state.nativeHeight || state.videoHeight;
+
+  // Handle dynamic screen rotation coordinate swapping
+  const streamIsLandscape = state.videoWidth > state.videoHeight;
+  const nativeIsLandscape = targetWidth > targetHeight;
+  if (streamIsLandscape !== nativeIsLandscape) {
+    const temp = targetWidth;
+    targetWidth = targetHeight;
+    targetHeight = temp;
+  }
+
+  const scaleX = targetWidth / rect.width;
+  const scaleY = targetHeight / rect.height;
   return {
     x: Math.max(0, Math.round((event.clientX - rect.left) * scaleX)),
     y: Math.max(0, Math.round((event.clientY - rect.top) * scaleY)),
@@ -404,9 +489,6 @@ async function sendSwipe(start, end, durationMs) {
   log(`swipe ${start.x},${start.y} -> ${end.x},${end.y}`);
 }
 
-// ═══════════════════════════════════════════════════════
-// Wireless connect / pairing
-// ═══════════════════════════════════════════════════════
 $("connectBtn2").addEventListener("click", async () => {
   const ip = $("wirelessIp").value || "192.168.1.100";
   const port = $("wirelessPort").value || "5555";
@@ -487,14 +569,12 @@ $("sendText").addEventListener("click", async () => {
   input.value = "";
 });
 
-// ═══════════════════════════════════════════════════════
-// Pointer events on canvas + scroll/wheel
-// ═══════════════════════════════════════════════════════
 let accumulatedDeltaY = 0;
 let isScrolling = false;
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (!state.videoWidth) return;
+  const width = state.videoWidth;
+  if (!width) return;
   canvas.setPointerCapture(event.pointerId);
   state.dragStart = {
     ...activePoint(event),
@@ -503,7 +583,8 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointerup", async (event) => {
-  if (!state.dragStart || !state.videoWidth) return;
+  const width = state.videoWidth;
+  if (!state.dragStart || !width) return;
   const end = activePoint(event);
   const start = state.dragStart;
   state.dragStart = null;
@@ -512,7 +593,9 @@ canvas.addEventListener("pointerup", async (event) => {
     if (distance < 12) {
       await sendTap(end);
     } else {
-      await sendSwipe(start, end, Math.round(performance.now() - start.time));
+      const overrideVal = Number($("swipeDuration").value);
+      const duration = !isNaN(overrideVal) && overrideVal > 0 ? overrideVal : Math.round(performance.now() - start.time);
+      await sendSwipe(start, end, duration);
     }
   } catch (error) {
     log(error.message);
@@ -555,25 +638,44 @@ canvas.addEventListener("wheel", (event) => {
 
     if (Math.abs(endY - startY) > 10) {
       try {
-        await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, 250);
+        const smooth = $("smoothScroll").checked;
+        const duration = smooth ? 250 : 80;
+        await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, duration);
       } catch (error) {
         log(error.message || String(error));
       }
     }
 
-    // Add an extra 50ms safety cooldown after the actual ADB network call returns
     setTimeout(() => {
       isScrolling = false;
     }, 50);
   }, 50);
 }, { passive: false });
 
-// ═══════════════════════════════════════════════════════
-// Init
-// ═══════════════════════════════════════════════════════
 loadDevices()
   .then(() => setStatus("Ready", "Select a device and connect"))
   .catch((error) => {
     setStatus("ADB error", error.message);
     log(error.message);
   });
+
+$("toggleSettingsBtn").addEventListener("click", () => {
+  const panel = $("interactiveSettings");
+  const arrow = $("settingsArrow");
+  if (panel.style.display === "none") {
+    panel.style.display = "flex";
+    arrow.style.transform = "rotate(180deg)";
+  } else {
+    panel.style.display = "none";
+    arrow.style.transform = "rotate(0deg)";
+  }
+});
+
+$("languageSelect").addEventListener("change", (e) => {
+  applyLanguage(e.target.value);
+});
+
+// Initialize translation system from persistent local preference (defaults to zh/Chinese)
+const activeLanguage = localStorage.getItem("language") || "zh";
+$("languageSelect").value = activeLanguage;
+applyLanguage(activeLanguage);

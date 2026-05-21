@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AutoAndroid Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/styles.css?v=52" />
+    <link rel="stylesheet" href="/assets/styles.css?v=105" />
   </head>
   <body>
     <main class="shell">
@@ -20,7 +20,7 @@
 
         <section class="panel">
           <div class="panel-title">
-            <span>Devices</span>
+            <span data-i18n="titleDevices">Devices</span>
             <button id="refreshDevices" title="Refresh Devices">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </button>
@@ -31,47 +31,47 @@
 
         <section class="panel">
           <div class="panel-title">
-            <span>Wireless Connect</span>
+            <span data-i18n="titleWireless">Wireless Connect</span>
           </div>
           <label>
-            Host / IP Address
+            <span data-i18n="labelIp">Host / IP Address</span>
             <input id="wirelessIp" type="text" placeholder="192.168.1.100" />
           </label>
           <label>
-            Port
+            <span data-i18n="labelPort">Port</span>
             <input id="wirelessPort" type="text" placeholder="5555" />
           </label>
           <label>
-            Pairing Code (Android 11+)
+            <span data-i18n="labelPairCode">Pairing Code (Android 11+)</span>
             <input id="pairCode" type="text" placeholder="123456" />
           </label>
           <div class="btn-row">
             <button id="pairBtn">
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-              Pair
+              <span data-i18n="btnPair">Pair</span>
             </button>
             <button id="connectBtn2" class="primary">
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-              Connect
+              <span data-i18n="btnConnect">Connect</span>
             </button>
           </div>
         </section>
 
         <section class="panel">
           <div class="panel-title">
-            <span>Stream Settings</span>
+            <span data-i18n="titleStream">Stream Settings</span>
           </div>
           <label>
-            Max Resolution
+            <span data-i18n="labelMaxRes">Max Resolution</span>
             <input id="maxSize" type="number" min="320" max="4096" step="80" placeholder="Auto" />
           </label>
           <div class="stream-grid">
             <label>
-              FPS
+              <span data-i18n="labelFps">FPS</span>
               <input id="maxFps" type="number" min="0" max="144" step="5" placeholder="Auto" />
             </label>
             <label>
-              Bitrate
+              <span data-i18n="labelBitrate">Bitrate</span>
               <div class="bitrate-group">
                 <input id="bitRateValue" type="number" min="1" step="0.5" value="8" />
                 <select id="bitRateUnit">
@@ -83,23 +83,46 @@
           </div>
           <button id="connectBtn" class="primary" style="margin-top: 8px;">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg>
-            Start Stream
+            <span data-i18n="btnStartStream">Start Stream</span>
           </button>
         </section>
 
         <section class="panel">
           <div class="panel-title">
-            <span>Controls</span>
+            <span data-i18n="titleControls">Controls</span>
           </div>
           <div class="key-grid">
-            <button data-key="KEYCODE_BACK">Back</button>
-            <button data-key="KEYCODE_HOME">Home</button>
-            <button data-key="KEYCODE_APP_SWITCH">Recent</button>
-            <button data-key="KEYCODE_POWER">Power</button>
+            <button data-key="KEYCODE_BACK" data-i18n="btnKeyBack">Back</button>
+            <button data-key="KEYCODE_HOME" data-i18n="btnKeyHome">Home</button>
+            <button data-key="KEYCODE_APP_SWITCH" data-i18n="btnKeyRecent">Recent</button>
+            <button data-key="KEYCODE_POWER" data-i18n="btnKeyPower">Power</button>
           </div>
           <div class="text-row" style="margin-top: 8px;">
             <input id="textInput" type="text" placeholder="Type text..." />
-            <button id="sendText" class="primary">Send</button>
+            <button id="sendText" class="primary" data-i18n="btnSendText">Send</button>
+          </div>
+          <div class="setting-toggle" style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+            <div class="panel-title" style="cursor: pointer; user-select: none;" id="toggleSettingsBtn">
+              <span data-i18n="titleInteractive">Interactive Settings</span>
+              <svg id="settingsArrow" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="transition: transform 0.2s;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+            <div id="interactiveSettings" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
+              <label>
+                <span data-i18n="labelLanguage">Language / 语言切换</span>
+                <select id="languageSelect">
+                  <option value="zh">简体中文 (Chinese)</option>
+                  <option value="en">English (US)</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="labelSwipeDuration">Swipe Duration Override (ms)</span>
+                <input id="swipeDuration" type="number" min="50" max="2000" step="50" placeholder="Use Drag Duration" />
+              </label>
+              <label style="flex-direction: row; justify-content: space-between; align-items: center; cursor: pointer; gap: 10px; margin-top: 5px; color: #aab2b9; font-size: 12px;">
+                <span data-i18n="labelSmoothScroll">Smooth Wheel Scroll</span>
+                <input id="smoothScroll" type="checkbox" checked style="width: auto; min-height: auto; cursor: pointer;" />
+              </label>
+            </div>
           </div>
         </section>
       </aside>
@@ -114,19 +137,18 @@
           <div class="hint">Tap screen to click, drag to swipe</div>
         </div>
         <div class="phone-wrap">
-          <video id="phoneVideo" autoplay muted playsinline></video>
           <canvas id="phoneCanvas" style="display: none;"></canvas>
-          <div id="emptyState">No active stream</div>
+          <div id="emptyState" data-i18n="emptyStateText">No active stream</div>
         </div>
       </section>
 
       <aside class="logbar">
         <div class="panel-title">
-          <span>Activity Log</span>
+          <span data-i18n="titleLog">Activity Log</span>
         </div>
         <ol id="logs"></ol>
       </aside>
     </main>
-    <script src="/assets/app.js?v=53"></script>
+    <script src="/assets/app.js?v=105" type="module"></script>
   </body>
 </html>
