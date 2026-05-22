@@ -44,6 +44,14 @@ def list_devices() -> list[Device]:
         parts = line.split()
         serial = parts[0]
         state = parts[1] if len(parts) > 1 else "unknown"
+
+        # Auto-disconnect and prune ghost offline TCP devices
+        if state == "offline" and ":" in serial:
+            try:
+                run_adb(["disconnect", serial], timeout=2)
+            except Exception:
+                pass
+            continue
         attrs = dict(
             token.split(":", 1)
             for token in parts[2:]

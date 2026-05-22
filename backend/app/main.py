@@ -52,6 +52,39 @@ class PairPayload(BaseModel):
     address: str = Field(description="host:port shown in wireless-debugging pairing dialog")
     code: str = Field(description="6-digit pairing code")
 
+import asyncio
+async def ghost_device_cleaner():
+    while True:
+        try:
+            devices = adb.list_devices()
+            for d in devices:
+                if d.state == "device" and ":" in d.serial:
+                    proc = await asyncio.create_subprocess_exec(
+                        adb.ADB_BIN, "-s", d.serial, "shell", "echo", "1",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL
+                    )
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=3.0)
+                        if proc.returncode != 0:
+                            adb.run_adb(["disconnect", d.serial])
+                    except asyncio.TimeoutError:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        try:
+                            adb.run_adb(["disconnect", d.serial])
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(ghost_device_cleaner())
+
 
 @app.get("/")
 def index() -> FileResponse:

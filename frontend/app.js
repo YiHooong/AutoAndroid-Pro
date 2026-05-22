@@ -302,9 +302,40 @@ function stopFpsCounter() {
   $("fpsCounter").style.display = "none";
 }
 
-function resetStream() {
+let connectionMonitorId = null;
+
+function startConnectionMonitor(serial) {
+  stopConnectionMonitor();
+  connectionMonitorId = setInterval(async () => {
+    try {
+      const res = await api('/api/devices');
+      if (res && res.devices) {
+        const found = res.devices.find(d => d.serial === serial && d.state === "device");
+        if (!found) {
+          log(`Device ${serial} disconnected unexpectedly.`);
+          resetStream(true, "Device Disconnected / 连接已断开");
+          loadDevices();
+        }
+      }
+    } catch (e) {
+      // Ignore API errors
+    }
+  }, 2500);
+}
+
+function stopConnectionMonitor() {
+  if (connectionMonitorId) {
+    clearInterval(connectionMonitorId);
+    connectionMonitorId = null;
+  }
+}
+
+function resetStream(isUnexpected = false, reason = "") {
   stopFpsCounter();
+  stopConnectionMonitor();
+
   if (state.ws) {
+    state.ws.onclose = null; // Prevent re-triggering
     state.ws.close();
     state.ws = null;
   }
@@ -316,13 +347,30 @@ function resetStream() {
     state.decoder = null;
   }
   state.parser = null;
-  state.videoWidth = 0;
-  state.videoHeight = 0;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvas.style.display = "none";
-  canvas.classList.remove("active");
-  emptyState.style.display = "block";
+  if (isUnexpected && state.videoWidth && state.videoHeight) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ff3b30";
+    
+    // Scale font size based on canvas width (approx 6% of width, minimum 36px)
+    const fontSize = Math.max(36, Math.floor(canvas.width * 0.06));
+    ctx.font = `bold ${fontSize}px 'Inter', sans-serif`;
+    
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(reason || "Stream Disconnected / 视频流已断开", canvas.width / 2, canvas.height / 2);
+  } else {
+    state.videoWidth = 0;
+    state.videoHeight = 0;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = "none";
+    canvas.classList.remove("active");
+    emptyState.style.display = "block";
+  }
+
+  $("fullscreenBtn").style.display = "none";
+  if ($("navOverlay")) $("navOverlay").style.display = "none";
 
   const btn = $("connectBtn");
   btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg> Start Stream`;
@@ -465,11 +513,14 @@ function connectStream() {
     }
     setStatus("Streaming", detail);
     emptyState.style.display = "none";
+    $("fullscreenBtn").style.display = "flex";
+    updateNavOverlayVisibility();
     log(`stream connected: ${serial}`);
     btn.disabled = false;
     btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
     btn.classList.add("streaming-active");
     startFpsCounter();
+    startConnectionMonitor(serial);
   };
 
   ws.onmessage = (event) => {
@@ -481,13 +532,15 @@ function connectStream() {
   ws.onerror = () => {
     setStatus("Stream error", "Check backend scrcpy logs");
     log("stream error");
-    resetStream();
+    resetStream(true, "Stream Error / 视频流出错");
+    loadDevices();
   };
 
   ws.onclose = (event) => {
     setStatus("Disconnected", event.reason || "stream closed");
     log(`stream closed${event.reason ? `: ${event.reason}` : ""}`);
-    resetStream();
+    resetStream(true, "Stream Closed / 视频流已关闭");
+    loadDevices();
   };
 }
 
@@ -843,6 +896,42 @@ $("deviceSelect").addEventListener("change", async (event) => {
   await updateDeviceResolution();
 });
 
+$("fullscreenBtn").addEventListener("click", () => {
+  const wrap = document.querySelector(".phone-wrap");
+  if (!document.fullscreenElement) {
+    wrap.requestFullscreen().catch(err => {
+      log(`Error enabling fullscreen: ${err.message}`);
+    });
+  } else {
+    document.exitFullscreen();
+  }
+});
+
+function updateNavOverlayVisibility() {
+  if (!state.ws) {
+    if ($("navOverlay")) $("navOverlay").style.display = "none";
+    return;
+  }
+  const isFullscreen = !!document.fullscreenElement;
+  const navBarBehavior = localStorage.getItem("nav_bar_behavior") || "hide";
+  
+  if (isFullscreen || navBarBehavior === "show") {
+    $("navOverlay").style.display = "flex";
+  } else {
+    $("navOverlay").style.display = "none";
+  }
+}
+
+document.addEventListener("fullscreenchange", () => {
+  const btn = $("fullscreenBtn");
+  if (document.fullscreenElement) {
+    btn.innerHTML = `<svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"></path></svg>`;
+  } else {
+    btn.innerHTML = `<svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>`;
+  }
+  updateNavOverlayVisibility();
+});
+
 document.querySelectorAll("[data-key]").forEach((button) => {
   button.addEventListener("click", async () => {
     const serial = $("deviceSelect").value;
@@ -1101,6 +1190,8 @@ function loadAllSettings() {
 
   chunkSizeSelect.value = localStorage.getItem("chunk_size_select") || "0";
   rightClickBehaviorSelect.value = localStorage.getItem("right_click_behavior") || "back";
+  const navBarSelect = $("navBarBehaviorSelect");
+  if (navBarSelect) navBarSelect.value = localStorage.getItem("nav_bar_behavior") || "hide";
 
   // Load AI Settings
   const provider = localStorage.getItem("ai_provider") || "openai";
@@ -1195,6 +1286,11 @@ $("saveSettingsBtn").addEventListener("click", () => {
 
   localStorage.setItem("chunk_size_select", chunkSizeSelect.value);
   localStorage.setItem("right_click_behavior", rightClickBehaviorSelect.value);
+  const navBarSelect = $("navBarBehaviorSelect");
+  if (navBarSelect) {
+    localStorage.setItem("nav_bar_behavior", navBarSelect.value);
+    updateNavOverlayVisibility();
+  }
 
   // Save AI settings
   localStorage.setItem("ai_provider", activeProvider);

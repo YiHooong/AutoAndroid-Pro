@@ -122,9 +122,27 @@
             </button>
           </div>
         </div>
-        <div class="phone-wrap">
-          <canvas id="phoneCanvas" style="display: none;"></canvas>
-          <div id="emptyState" data-i18n="emptyStateText">No active stream</div>
+        <div class="phone-wrap" id="phoneWrap" style="position: relative; display: flex; flex-direction: column; padding: 0; min-height: 0; height: 100%;">
+          <button id="fullscreenBtn" style="position: absolute; top: 16px; left: 16px; width: 56px; height: 56px; border-radius: 50%; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 50; transition: all 0.2s; opacity: 0.3;" onmouseover="this.style.opacity='1'; this.style.background='rgba(0,255,102,0.2)'; this.style.color='#00ff66';" onmouseout="this.style.opacity='0.3'; this.style.background='rgba(0,0,0,0.5)'; this.style.color='rgba(255,255,255,0.8)';">
+            <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+          </button>
+          
+          <div style="flex: 1; min-height: 0; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 0;">
+            <canvas id="phoneCanvas" style="display: none; max-width: 100%; max-height: 100%; width: auto; height: auto;"></canvas>
+            <div id="emptyState" data-i18n="emptyStateText" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); white-space: nowrap;">No active stream</div>
+          </div>
+          
+          <div id="navOverlay" style="display: none; justify-content: center; gap: 40px; background: rgba(0,0,0,0.4); padding: 16px 0; border-top: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; width: 100%;">
+            <button class="nav-overlay-btn" data-key="4" style="background: transparent; border: none; color: rgba(255,255,255,0.8); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;" onmouseover="this.style.color='#00ff66'" onmouseout="this.style.color='rgba(255,255,255,0.8)'" title="Back">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button class="nav-overlay-btn" data-key="3" style="background: transparent; border: none; color: rgba(255,255,255,0.8); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;" onmouseover="this.style.color='#00ff66'" onmouseout="this.style.color='rgba(255,255,255,0.8)'" title="Home">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>
+            </button>
+            <button class="nav-overlay-btn" data-key="187" style="background: transparent; border: none; color: rgba(255,255,255,0.8); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;" onmouseover="this.style.color='#00ff66'" onmouseout="this.style.color='rgba(255,255,255,0.8)'" title="Recents">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="4" width="16" height="16" rx="3" ry="3"></rect></svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -220,7 +238,17 @@
                   <option value="back">触发返回键 / Back Key (默认)</option>
                   <option value="menu">弹出自定义右键菜单 / Context Menu</option>
                 </select>
-                <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“触发返回键”时，右键直接在投屏区域模拟物理返回。选择“弹出自定义右键菜单”时，右键点击将展开功能操作列表（如返回、主页、任务、音量控制等）。</span>
+                <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“触发返回键”时，右键直接在投屏区域模拟物理返回。选择“弹出自定义右键菜单”时，右键点击将展开功能操作列表。</span>
+              </div>
+              
+              <!-- Show Nav Bar Option -->
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+                <span data-i18n="labelNavBarBehavior" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">非全屏模式下显示底栏 (Show Navigation Bar in Window Mode):</span>
+                <select id="navBarBehaviorSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <option value="hide">隐藏 / Hide (默认)</option>
+                  <option value="show">始终显示 / Always Show</option>
+                </select>
+                <span data-i18n="labelNavBarTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：三大金刚按键（返回、主页、任务）在全屏模式下会自动显示。你可以选择在非全屏模式下是否也展示它们。</span>
               </div>
             </div>
           </div>
