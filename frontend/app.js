@@ -40,6 +40,8 @@ const TRANSLATIONS = {
     btnKeyRecent: "任务键",
     btnKeyPower: "电源键",
     btnSendText: "发送",
+    labelChunkSizeSelect: "视频流读取数据块大小 (Chunk Size)",
+    labelChunkSizeTip: "提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。",
     labelLanguage: "显示语言 / Language",
     placeholderText: "输入文本发送到手机...",
     emptyStateText: "当前无活跃画面流",
@@ -85,6 +87,8 @@ const TRANSLATIONS = {
     btnKeyRecent: "Recent",
     btnKeyPower: "Power",
     btnSendText: "Send",
+    labelChunkSizeSelect: "Read Chunk Size Selection",
+    labelChunkSizeTip: "Tip: Selecting 'No Limit' disables packet framing limits, resulting in raw socket direct reading (recommended for lowest latency). You can select 4KB-64KB chunk parameters if needed.",
     labelLanguage: "Language / 语言切换",
     placeholderText: "Type text...",
     emptyStateText: "No active stream",
@@ -342,12 +346,15 @@ function connectStream() {
   btn.disabled = true;
   btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
 
+  const chunkSize = Number(chunkSizeSelect.value) || 0;
+
   const bitRate = ($("bitRateValue").value || "8") + $("bitRateUnit").value;
   const params = new URLSearchParams({
     serial,
     max_size: $("maxSize").value || "1280",
     max_fps: $("maxFps").value || "0",
     bit_rate: bitRate,
+    chunk_size: chunkSize,
   });
 
   try {
@@ -935,6 +942,7 @@ const settingsStatusArea = $("settingsStatusArea");
 
 // Inputs
 const languageSelect = $("languageSelect");
+const chunkSizeSelect = $("chunkSizeSelect");
 const aiEndpoint = $("aiEndpoint");
 const aiKey = $("aiKey");
 const aiModelName = $("aiModelName");
@@ -995,6 +1003,8 @@ function loadAllSettings() {
   // Load General Settings
   const lang = localStorage.getItem("language") || "zh";
   languageSelect.value = lang;
+
+  chunkSizeSelect.value = localStorage.getItem("chunk_size_select") || "0";
 
   // Load AI Settings
   const provider = localStorage.getItem("ai_provider") || "openai";
@@ -1086,6 +1096,8 @@ $("saveSettingsBtn").addEventListener("click", () => {
   const selectedLang = languageSelect.value;
   localStorage.setItem("language", selectedLang);
   applyLanguage(selectedLang);
+
+  localStorage.setItem("chunk_size_select", chunkSizeSelect.value);
 
   // Save AI settings
   localStorage.setItem("ai_provider", activeProvider);

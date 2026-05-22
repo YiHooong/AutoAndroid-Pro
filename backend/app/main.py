@@ -292,6 +292,7 @@ async def scrcpy_ws(
     max_size: int = Query(default=1280, ge=320, le=4096),
     max_fps: int = Query(default=60, ge=0),
     bit_rate: str = Query(default="8M"),
+    chunk_size: int = Query(default=4096, ge=0),
 ):
     await websocket.accept()
     try:
@@ -300,6 +301,7 @@ async def scrcpy_ws(
             max_size=max_size,
             max_fps=max_fps,
             video_bit_rate=bit_rate,
+            chunk_size=chunk_size,
         )
         from .scrcpy import get_broadcaster, send_touch_control
         broadcaster = await get_broadcaster(device)

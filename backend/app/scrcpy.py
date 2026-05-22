@@ -90,6 +90,8 @@ class StreamOptions:
     max_size: int = 1280
     max_fps: int = 60
     video_bit_rate: str = "8M"
+    chunk_size: int = 4096
+
 
 
 class ScrcpySession:
@@ -491,8 +493,9 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
         # Skip past these bytes; stream from the first NAL start code.
         NAL_START = b"\x00\x00\x00\x01"
         buf = b""
+        chunk_sz = options.chunk_size if options.chunk_size > 0 else 131072
         while True:
-            data = await reader.read(4096)
+            data = await reader.read(chunk_sz)
             if not data:
                 return
             buf += data
@@ -502,7 +505,7 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
                 break
 
         while True:
-            chunk = await reader.read(4096)
+            chunk = await reader.read(chunk_sz)
             if not chunk:
                 break
             yield chunk

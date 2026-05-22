@@ -200,7 +200,19 @@
                   <option value="en">English (US)</option>
                 </select>
               </div>
-
+              <!-- Read Chunk Size Option -->
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+                <span data-i18n="labelChunkSizeSelect" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">视频流读取数据块大小 (Chunk Size):</span>
+                <select id="chunkSizeSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <option value="0">不设置 / Direct (0KB - 推荐，延迟更低)</option>
+                  <option value="4096">4KB (4096 字节)</option>
+                  <option value="8192">8KB (8192 字节)</option>
+                  <option value="16384">16KB (16384 字节)</option>
+                  <option value="32768">32KB (32768 字节)</option>
+                  <option value="65536">64KB (65536 字节)</option>
+                </select>
+                <span data-i18n="labelChunkSizeTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。</span>
+              </div>
             </div>
           </div>
 
