@@ -544,12 +544,12 @@ function activePoint(event) {
 }
 
 function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons) {
-  // scrcpy v1.25 inject_touch_event: 28 bytes total
-  const buf = new ArrayBuffer(28);
+  // scrcpy v4 inject_touch_event: 32 bytes total
+  const buf = new ArrayBuffer(32);
   const view = new DataView(buf);
   view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_TOUCH_EVENT);
   view.setUint8(1, action);
-  // pointerId is uint64 (8 bytes) — we always use small IDs like ws-scrcpy
+  // pointerId is uint64 (8 bytes)
   view.setUint32(2, 0);           // upper 4 bytes
   view.setUint32(6, pointerId);   // lower 4 bytes
   view.setUint32(10, x);
@@ -557,7 +557,8 @@ function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, 
   view.setUint16(18, screenW);
   view.setUint16(20, screenH);
   view.setUint16(22, pressure);
-  view.setUint32(24, buttons);
+  view.setUint32(24, 0);          // action_button (0 for simple touch)
+  view.setUint32(28, buttons);
   return buf;
 }
 

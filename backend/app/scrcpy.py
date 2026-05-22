@@ -41,6 +41,7 @@ def _scrcpy_version() -> str:
 def _server_path() -> Path:
     candidates = [
         SCRCPY_SERVER_PATH,
+        "/usr/share/scrcpy/scrcpy-server-v4.0",
         "/usr/share/scrcpy/scrcpy-server",
         "/usr/share/scrcpy/scrcpy-server.jar",
         "/usr/local/share/scrcpy/scrcpy-server",
@@ -97,9 +98,17 @@ class ScrcpySession:
         self.options = options
         self.version = _scrcpy_version()
         self.major = _major(self.version)
-        self.socket_name = (
-            f"autoandroid_{uuid.uuid4().hex[:10]}" if self.major >= 2 else "scrcpy"
-        )
+        if self.major >= 4:
+            # v4 uses scid (31-bit non-negative int) for unique socket naming
+            scid_val = int(uuid.uuid4().hex[:7], 16) % (2**30)
+            self.scid = scid_val
+            self.socket_name = f"scrcpy_{scid_val:08x}"
+        elif self.major >= 2:
+            self.socket_name = f"autoandroid_{uuid.uuid4().hex[:10]}"
+            self.scid = None
+        else:
+            self.socket_name = "scrcpy"
+            self.scid = None
         self.port = _free_port()
         self.server_proc: subprocess.Popen[bytes] | None = None
         self.ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -124,32 +133,55 @@ class ScrcpySession:
             )
             run_adb(["shell", kill_cmd], serial=self.serial)
         bit_rate = _bit_rate_value(self.options.video_bit_rate)
-        option_pairs = [
-            "log_level=info",
-            "tunnel_forward=true",
-            "control=true",
-            "cleanup=true",
-            "send_device_meta=false",
-            _raw_stream_option(self.version),
-            f"max_size={self.options.max_size}",
-        ]
-        if self.options.max_fps > 0:
-            option_pairs.append(f"max_fps={self.options.max_fps}")
-
-        if self.major >= 2:
-            option_pairs += [
+        if self.major >= 4:
+            option_pairs = [
+                "log_level=info",
+                "tunnel_forward=true",
+                "control=true",
+                "cleanup=true",
+                "video=true",
+                "audio=false",
+                "raw_stream=true",
+                f"max_size={self.options.max_size}",
+                f"video_bit_rate={bit_rate}",
+            ]
+            if self.options.max_fps > 0:
+                option_pairs.append(f"max_fps={self.options.max_fps}")
+            if self.scid is not None:
+                option_pairs.append(f"scid={self.scid:x}")
+            option_pairs.append("video_codec_options=i-frame-interval=1")
+        elif self.major >= 2:
+            option_pairs = [
+                "log_level=info",
+                "tunnel_forward=true",
+                "control=true",
+                "cleanup=true",
+                "send_device_meta=false",
+                _raw_stream_option(self.version),
+                f"max_size={self.options.max_size}",
                 f"socket_name={self.socket_name}",
                 "audio=false",
                 "send_codec_meta=false",
                 f"video_bit_rate={bit_rate}",
                 "video_codec_options=i-frame-interval=1",
             ]
+            if self.options.max_fps > 0:
+                option_pairs.append(f"max_fps={self.options.max_fps}")
         else:
-            option_pairs += [
+            option_pairs = [
+                "log_level=info",
+                "tunnel_forward=true",
+                "control=true",
+                "cleanup=true",
+                "send_device_meta=false",
+                _raw_stream_option(self.version),
+                f"max_size={self.options.max_size}",
                 "send_frame_meta=false",
                 f"bit_rate={bit_rate}",
                 "codec_options=i-frame-interval=1",
             ]
+            if self.options.max_fps > 0:
+                option_pairs.append(f"max_fps={self.options.max_fps}")
 
         command = (
             f"CLASSPATH={DEVICE_SERVER_PATH} app_process / "

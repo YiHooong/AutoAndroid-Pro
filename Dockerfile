@@ -17,7 +17,14 @@ RUN apt-get update \
       android-tools-adb \
       ffmpeg \
       scrcpy \
+      curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install scrcpy-server v4.0
+RUN mkdir -p /usr/share/scrcpy && \
+    curl -L -o /usr/share/scrcpy/scrcpy-server-v4.0 \
+    https://github.com/Genymobile/scrcpy/releases/download/v4.0/scrcpy-server-v4.0 && \
+    chmod +x /usr/share/scrcpy/scrcpy-server-v4.0
 
 WORKDIR /app
 COPY requirements.txt .

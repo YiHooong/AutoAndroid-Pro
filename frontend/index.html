@@ -26,12 +26,6 @@
             </button>
           </div>
           <select id="deviceSelect"></select>
-          <div class="device-meta-row" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-            <button id="shellBtn" class="action-btn" title="Open ADB Shell" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; background: rgba(255,255,255,0.06); color: #fff; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; white-space: nowrap;">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="color: #00ff66;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3"></path></svg>
-              <span data-i18n="shellBtn">Shell</span>
-            </button>
-          </div>
         </section>
 
         <section class="panel">
@@ -112,9 +106,13 @@
 
       <section class="stage">
         <div class="topbar">
-          <div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <strong id="statusText">Ready</strong>
             <span id="statusDetail">Select a device and connect</span>
+            <button id="shellBtn" class="action-btn" title="Open ADB Shell" style="padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; background: rgba(255,255,255,0.06); color: #fff; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; white-space: nowrap; margin-left: 4px;">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="color: #00ff66;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3"></path></svg>
+              <span data-i18n="shellBtn">Shell</span>
+            </button>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
             <span id="fpsCounter" class="fps-badge" style="display: none; margin: 0;">0 FPS</span>
