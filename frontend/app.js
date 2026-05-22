@@ -1,7 +1,79 @@
+class LowLatencyAudioPlayer {
+  constructor(sampleRate = 48000, channels = 2) {
+    this.sampleRate = sampleRate;
+    this.channels = channels;
+    this.audioCtx = null;
+    this.gainNode = null;
+    this.nextStartTime = 0;
+  }
+
+  start() {
+    if (this.audioCtx) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      console.warn("Web Audio API is not supported in this browser");
+      return;
+    }
+    this.audioCtx = new AudioContextClass({
+      sampleRate: this.sampleRate
+    });
+    this.gainNode = this.audioCtx.createGain();
+    this.gainNode.gain.value = 1.0; // Clean 100% digital volume
+    this.gainNode.connect(this.audioCtx.destination);
+    this.nextStartTime = this.audioCtx.currentTime;
+    console.log("[AudioPlayer] Started Web Audio Context with GainNode");
+  }
+
+  stop() {
+    if (this.audioCtx) {
+      this.audioCtx.close().catch(() => {});
+      this.audioCtx = null;
+      this.gainNode = null;
+    }
+    this.nextStartTime = 0;
+  }
+
+  feed(arrayBuffer) {
+    if (!this.audioCtx || !this.gainNode) return;
+
+    if (this.audioCtx.state === "suspended") {
+      this.audioCtx.resume();
+    }
+
+    const int16 = new Int16Array(arrayBuffer);
+    const numSamples = int16.length / this.channels;
+    if (numSamples === 0) return;
+    
+    const audioBuffer = this.audioCtx.createBuffer(this.channels, numSamples, this.sampleRate);
+    const leftChannel = audioBuffer.getChannelData(0);
+    const rightChannel = audioBuffer.getChannelData(1);
+
+    for (let i = 0; i < numSamples; i++) {
+      leftChannel[i] = int16[i * 2] / 32768.0;
+      rightChannel[i] = int16[i * 2 + 1] / 32768.0;
+    }
+
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(this.gainNode);
+
+    const currentTime = this.audioCtx.currentTime;
+    if (this.nextStartTime < currentTime) {
+      // Sync up to prevent pop noise
+      this.nextStartTime = currentTime + 0.02;
+    }
+
+    source.start(this.nextStartTime);
+    this.nextStartTime += audioBuffer.duration;
+  }
+}
+
 const state = {
   devices: [],
   selected: "",
   ws: null,
+  audioWs: null,
+  audioPlayer: null,
   // WebCodecs engine
   decoder: null,
   parser: null,
@@ -17,6 +89,7 @@ const state = {
   fpsIntervalId: null,
   smoothedFps: 0,
   keyboardControlEnabled: true,
+  audioForwardEnabled: false,
 };
 
 const TRANSLATIONS = {
@@ -335,10 +408,28 @@ function resetStream(isUnexpected = false, reason = "") {
   stopFpsCounter();
   stopConnectionMonitor();
 
+  const audioPlayer = $("deviceAudioPlayer");
+  if (audioPlayer) {
+    audioPlayer.src = "";
+    try {
+      audioPlayer.load();
+    } catch (e) {}
+  }
+
   if (state.ws) {
     state.ws.onclose = null; // Prevent re-triggering
     state.ws.close();
     state.ws = null;
+  }
+
+  if (state.audioWs) {
+    state.audioWs.onclose = null;
+    state.audioWs.close();
+    state.audioWs = null;
+  }
+  if (state.audioPlayer) {
+    state.audioPlayer.stop();
+    state.audioPlayer = null;
   }
   
   if (state.decoder) {
@@ -370,7 +461,6 @@ function resetStream(isUnexpected = false, reason = "") {
     emptyState.style.display = "block";
   }
 
-  $("fullscreenBtn").style.display = "none";
   if ($("navOverlay")) $("navOverlay").style.display = "none";
 
   const btn = $("connectBtn");
@@ -396,6 +486,7 @@ function connectStream() {
   btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
 
   const chunkSize = Number(chunkSizeSelect.value) || 0;
+  const audioForwardEnabled = state.audioForwardEnabled;
 
   const bitRate = ($("bitRateValue").value || "8") + $("bitRateUnit").value;
   const params = new URLSearchParams({
@@ -404,6 +495,7 @@ function connectStream() {
     max_fps: $("maxFps").value || "0",
     bit_rate: bitRate,
     chunk_size: chunkSize,
+    audio: audioForwardEnabled ? "true" : "false",
   });
 
   try {
@@ -514,12 +606,52 @@ function connectStream() {
     }
     setStatus("Streaming", detail);
     emptyState.style.display = "none";
-    $("fullscreenBtn").style.display = "flex";
-    updateNavOverlayVisibility();
-    log(`stream connected: ${serial}`);
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
-    btn.classList.add("streaming-active");
+     updateNavOverlayVisibility();
+     log(`stream connected: ${serial}`);
+     btn.disabled = false;
+     btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg> Stop Stream`;
+     btn.classList.add("streaming-active");
+     // Start live audio playback if audio forwarding is enabled
+     const audioForwardEnabled = state.audioForwardEnabled;
+     if (audioForwardEnabled) {
+       log("Connecting real-time low-latency audio stream...");
+       try {
+         state.audioPlayer = new LowLatencyAudioPlayer(48000, 2);
+         state.audioPlayer.start();
+         if (state.audioPlayer.gainNode) {
+           state.audioPlayer.gainNode.gain.value = Number($("floatVolumeSlider").value);
+         }
+
+        const audioWs = new WebSocket(`${protocol}://${location.host}/ws/audio?serial=${encodeURIComponent(serial)}`);
+        audioWs.binaryType = "arraybuffer";
+        state.audioWs = audioWs;
+
+        audioWs.onopen = () => {
+          log("Audio channel connected successfully / 手机声音流连接成功");
+        };
+
+        audioWs.onmessage = (event) => {
+          if (state.audioPlayer) {
+            state.audioPlayer.feed(event.data);
+          }
+        };
+
+        audioWs.onerror = (e) => {
+          console.warn("Audio WebSocket error:", e);
+        };
+
+        audioWs.onclose = () => {
+          log("Audio channel disconnected / 手机声音流断开");
+          if (state.audioPlayer) {
+            state.audioPlayer.stop();
+            state.audioPlayer = null;
+          }
+        };
+      } catch (err) {
+        log(`Failed to start low latency audio: ${err.message}`);
+      }
+    }
+
     startFpsCounter();
     startConnectionMonitor(serial);
   };
@@ -1030,19 +1162,28 @@ document.querySelectorAll("[data-key]").forEach((button) => {
 $("sendText").addEventListener("click", async () => {
   const serial = $("deviceSelect").value;
   const input = $("textInput");
-  if (!input.value) return;
+  const textValue = input.value;
+  if (!textValue) return;
+
+  // Copy to local system clipboard
+  try {
+    await navigator.clipboard.writeText(textValue);
+    log(`Copied to local clipboard: "${textValue}"`);
+  } catch (e) {
+    log(`Local clipboard copy failed: ${e}`);
+  }
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    const msg = buildSetClipboardMessage(input.value, true);
+    const msg = buildSetClipboardMessage(textValue, true);
     state.ws.send(msg);
-    log(`Text pasted via clipboard: "${input.value}"`);
+    log(`Text pasted via clipboard: "${textValue}"`);
     input.value = "";
   } else if (serial) {
     await api(`/api/devices/${encodeURIComponent(serial)}/text`, {
       method: "POST",
-      body: JSON.stringify({ text: input.value }),
+      body: JSON.stringify({ text: textValue }),
     });
-    log(`text "${input.value}" (via api)`);
+    log(`text "${textValue}" (via api)`);
     input.value = "";
   }
 });
@@ -1289,8 +1430,6 @@ function loadAllSettings() {
 
   chunkSizeSelect.value = localStorage.getItem("chunk_size_select") || "0";
   rightClickBehaviorSelect.value = localStorage.getItem("right_click_behavior") || "back";
-  const navBarSelect = $("navBarBehaviorSelect");
-  if (navBarSelect) navBarSelect.value = localStorage.getItem("nav_bar_behavior") || "hide";
   if (hideBorderSelect) hideBorderSelect.value = localStorage.getItem("hide_border") || "false";
   updateBorderVisibility();
 
@@ -1387,11 +1526,6 @@ $("saveSettingsBtn").addEventListener("click", () => {
 
   localStorage.setItem("chunk_size_select", chunkSizeSelect.value);
   localStorage.setItem("right_click_behavior", rightClickBehaviorSelect.value);
-  const navBarSelect = $("navBarBehaviorSelect");
-  if (navBarSelect) {
-    localStorage.setItem("nav_bar_behavior", navBarSelect.value);
-    updateNavOverlayVisibility();
-  }
   if (hideBorderSelect) {
     localStorage.setItem("hide_border", hideBorderSelect.value);
     updateBorderVisibility();
@@ -1573,7 +1707,26 @@ function handleGlobalKey(event, action) {
     return;
   }
 
-  const androidCode = JS_TO_ANDROID_KEY[event.code];
+  let androidCode = JS_TO_ANDROID_KEY[event.code];
+  if (androidCode === undefined) {
+    // Fallback to checking event.key for digits and operators
+    if (event.key >= "0" && event.key <= "9") {
+      androidCode = 7 + (event.key.charCodeAt(0) - 48); // 7 is KEYCODE_0
+    } else if (event.key === "+") {
+      androidCode = 81; // KEYCODE_PLUS
+    } else if (event.key === "-") {
+      androidCode = 69; // KEYCODE_MINUS
+    } else if (event.key === "*") {
+      androidCode = 17; // KEYCODE_STAR
+    } else if (event.key === "/") {
+      androidCode = 76; // KEYCODE_SLASH
+    } else if (event.key === ".") {
+      androidCode = 56; // KEYCODE_PERIOD
+    } else if (event.key === "Enter") {
+      androidCode = 66; // KEYCODE_ENTER
+    }
+  }
+
   if (androidCode !== undefined) {
     event.preventDefault();
     const msg = buildKeyEventMessage(action, androidCode);
@@ -1584,22 +1737,201 @@ function handleGlobalKey(event, action) {
 document.addEventListener("keydown", (e) => handleGlobalKey(e, SCRCPY_CONTROL.ACTION_DOWN));
 document.addEventListener("keyup", (e) => handleGlobalKey(e, SCRCPY_CONTROL.ACTION_UP));
 
-// Toggle button action handler
-$("keyboardToggleBtn").addEventListener("click", () => {
+// Toggle button action handler for floating keyboard button
+$("floatKeyboardBtn").addEventListener("click", () => {
   state.keyboardControlEnabled = !state.keyboardControlEnabled;
-  const btn = $("keyboardToggleBtn");
+  const btn = $("floatKeyboardBtn");
   if (state.keyboardControlEnabled) {
-    btn.style.background = "rgba(0, 255, 102, 0.1)";
-    btn.style.border = "1px solid rgba(0, 255, 102, 0.25)";
-    btn.style.color = "#00ff66";
-    btn.style.boxShadow = "0 0 10px rgba(0, 255, 102, 0.15)";
+    btn.classList.add("active");
     log("Keyboard control enabled / 开启键盘控制");
   } else {
-    btn.style.background = "rgba(255, 255, 255, 0.05)";
-    btn.style.border = "1px solid rgba(255, 255, 255, 0.08)";
-    btn.style.color = "#aab2b9";
-    btn.style.boxShadow = "none";
+    btn.classList.remove("active");
     log("Keyboard control disabled / 关闭键盘控制");
   }
 });
+
+// A robust helper to stop and automatically restart the stream cleanly
+function reconnectStream() {
+  log("Restarting stream connection to apply settings... / 正在自动重新连接音视频流以应用设置...");
+  if (state.ws) {
+    resetStream();
+    // A tiny 400ms delay to let WS close cleanly and release ports on server/client
+    setTimeout(() => {
+      connectStream();
+    }, 400);
+  } else {
+    connectStream();
+  }
+}
+
+// Audio toggle action handler for floating button
+$("floatAudioBtn").addEventListener("click", () => {
+  state.audioForwardEnabled = !state.audioForwardEnabled;
+  const btn = $("floatAudioBtn");
+  const icon = $("floatAudioIcon");
+
+  if (state.audioForwardEnabled) {
+    btn.classList.add("active");
+    if (icon) icon.style.color = "#00ff66";
+    log("Audio forwarding enabled / 开启手机声音转发");
+  } else {
+    btn.classList.remove("active");
+    if (icon) icon.style.color = "rgba(255,255,255,0.8)";
+    log("Audio forwarding disabled / 关闭手机声音转发");
+  }
+
+  // If streaming is not active, automatically click/trigger connectStream to open screen stream (ONLY if turning audio ON!)
+  if (!state.ws) {
+    if (state.audioForwardEnabled) {
+      let serial = $("deviceSelect").value;
+      if (!serial && $("deviceSelect").options.length > 0) {
+        for (let i = 0; i < $("deviceSelect").options.length; i++) {
+          if ($("deviceSelect").options[i].value) {
+            $("deviceSelect").value = $("deviceSelect").options[i].value;
+            state.selected = $("deviceSelect").options[i].value;
+            serial = state.selected;
+            break;
+          }
+        }
+      }
+
+      if (!serial) {
+        log("Error: No device selected for streaming / 错误：未检测到可用设备，无法自动串流");
+        alert("请先选择一个设备！ / Please select a device first!");
+        return;
+      }
+
+      log("Audio enabled offline, automatically starting stream... / 声音已开启，正在为您自动启动推流...");
+      connectStream();
+    }
+  } else {
+    // If streaming is active, dynamically restart the stream to apply the new audio setting
+    log("Audio setting changed, automatically restarting stream... / 声音设置变更，正在为您自动重启音视频流...");
+    reconnectStream();
+  }
+});
+
+// Setup volume slider listener for float panel
+const volSlider = $("floatVolumeSlider");
+const volLabel = $("floatVolumeLabel");
+if (volSlider && volLabel) {
+  volSlider.addEventListener("input", () => {
+    const val = Number(volSlider.value);
+    volLabel.textContent = `${Math.round(val * 100)}%`;
+    if (state.audioPlayer && state.audioPlayer.gainNode) {
+      state.audioPlayer.gainNode.gain.value = val;
+    }
+  });
+}
+
+// Hover micro-interactions for slide-out volume bar
+const floatAudioContainer = $("floatAudioContainer");
+const floatVolumePanel = $("floatVolumePanel");
+const floatAudioBtn = $("floatAudioBtn");
+if (floatAudioContainer && floatVolumePanel && floatAudioBtn) {
+  floatAudioContainer.addEventListener("mouseenter", () => {
+    floatVolumePanel.style.width = "160px";
+    floatVolumePanel.style.opacity = "1";
+    floatVolumePanel.style.padding = "0 8px";
+  });
+
+  floatAudioContainer.addEventListener("mouseleave", () => {
+    floatVolumePanel.style.width = "0px";
+    floatVolumePanel.style.opacity = "0";
+    floatVolumePanel.style.padding = "0px";
+  });
+}
+
+// Screenshot action handler for floating button
+$("floatScreenshotBtn").addEventListener("click", () => {
+  const canvas = $("phoneCanvas");
+  // If streaming is active, instantly capture from local canvas (0ms latency, zero server load)
+  if (state.ws && canvas && canvas.style.display !== "none") {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `screenshot_${new Date().getTime()}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      log("Screenshot captured instantly from web player / 截图成功（已直接从网页播放器捕获）");
+    } catch (e) {
+      log(`Canvas screenshot error: ${e.message}, falling back to ADB...`);
+      triggerAdbScreenshot();
+    }
+  } else {
+    // If not streaming, trigger ADB fallback screenshot REST API
+    triggerAdbScreenshot();
+  }
+});
+
+function triggerAdbScreenshot() {
+  const serial = state.selected;
+  if (!serial) {
+    log("Error: No device selected for screenshot / 错误：未选择设备无法截图");
+    alert("请先选择一个设备 / Please select a device first");
+    return;
+  }
+  log(`Requesting device screenshot via ADB for ${serial}... / 正在通过 ADB 请求手机截图...`);
+  
+  // Disable button momentarily to prevent double clicks
+  const btn = $("floatScreenshotBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+  }
+
+  fetch(`/api/devices/${encodeURIComponent(serial)}/screenshot`)
+    .then(response => {
+      if (!response.ok) throw new Error("ADB screencap failed");
+      return response.blob();
+    })
+    .then(blob => {
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `adb_screenshot_${serial.replace(/:/g, "_")}_${new Date().getTime()}.png`;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      log("ADB screenshot saved successfully / 手机截图成功（已通过 ADB 捕获并保存）");
+    })
+    .catch(err => {
+      log(`Screenshot capture failed / 截图失败: ${err.message}`);
+      alert(`截图失败 / Screenshot failed: ${err.message}`);
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = "0.3";
+      }
+    });
+}
+
+// Nav Bar overlay toggle action handler for floating button
+$("floatNavToggleBtn").addEventListener("click", () => {
+  const current = localStorage.getItem("nav_bar_behavior") || "hide";
+  const next = current === "show" ? "hide" : "show";
+  localStorage.setItem("nav_bar_behavior", next);
+  
+  updateNavOverlayVisibility();
+  updateFloatNavBtnStyle();
+  log(`Navigation bottom bar behavior changed to: ${next === "show" ? "Always Show" : "Hide in non-fullscreen"} / 虚拟导航底栏显示模式已切换为：${next === "show" ? "总是显示" : "非全屏下隐藏"}`);
+});
+
+function updateFloatNavBtnStyle() {
+  const btn = $("floatNavToggleBtn");
+  if (!btn) return;
+  const isShow = localStorage.getItem("nav_bar_behavior") === "show";
+  if (isShow) {
+    btn.classList.add("active");
+  } else {
+    btn.classList.remove("active");
+  }
+}
+
+// Initialize styles for floating buttons
+updateFloatNavBtnStyle();
 

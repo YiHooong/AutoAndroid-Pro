@@ -91,6 +91,7 @@ class StreamOptions:
     max_fps: int = 60
     video_bit_rate: str = "8M"
     chunk_size: int = 4096
+    audio: bool = False
 
 
 
@@ -115,6 +116,11 @@ class ScrcpySession:
         self.server_proc: subprocess.Popen[bytes] | None = None
         self.ffmpeg_proc: asyncio.subprocess.Process | None = None
         self.control_writer: asyncio.StreamWriter | None = None
+        self.audio_reader: asyncio.StreamReader | None = None
+        self.audio_writer: asyncio.StreamWriter | None = None
+        self.audio_queue: asyncio.Queue | None = None
+        self.audio_task: asyncio.Task | None = None
+        self.volume_task: asyncio.Task | None = None
 
     def _adb_prefix(self) -> list[str]:
         return [ADB_BIN, "-s", self.serial]
@@ -142,11 +148,13 @@ class ScrcpySession:
                 "control=true",
                 "cleanup=true",
                 "video=true",
-                "audio=false",
+                "audio=true" if self.options.audio else "audio=false",
                 "raw_stream=true",
                 f"max_size={self.options.max_size}",
                 f"video_bit_rate={bit_rate}",
             ]
+            if self.options.audio:
+                option_pairs.append("audio_codec=raw")
             if self.options.max_fps > 0:
                 option_pairs.append(f"max_fps={self.options.max_fps}")
             if self.scid is not None:
@@ -162,11 +170,13 @@ class ScrcpySession:
                 _raw_stream_option(self.version),
                 f"max_size={self.options.max_size}",
                 f"socket_name={self.socket_name}",
-                "audio=false",
+                "audio=true" if self.options.audio else "audio=false",
                 "send_codec_meta=false",
                 f"video_bit_rate={bit_rate}",
                 "video_codec_options=i-frame-interval=1",
             ]
+            if self.options.audio:
+                option_pairs.append("audio_codec=raw")
             if self.options.max_fps > 0:
                 option_pairs.append(f"max_fps={self.options.max_fps}")
         else:
@@ -185,15 +195,28 @@ class ScrcpySession:
             if self.options.max_fps > 0:
                 option_pairs.append(f"max_fps={self.options.max_fps}")
 
+        # Boost Android device media volume to maximum so audio capture is at 100% digital volume
+        if self.options.audio:
+            with contextlib.suppress(Exception):
+                run_adb(["shell", "cmd", "audio", "volume", "--stream", "3", "--set", "15"], serial=self.serial)
+
         command = (
             f"CLASSPATH={DEVICE_SERVER_PATH} app_process / "
             f"com.genymobile.scrcpy.Server {self.version} {' '.join(option_pairs)}"
         )
         self.server_proc = subprocess.Popen(
             self._adb_prefix() + ["shell", command],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
+        def log_stdout(proc):
+            try:
+                for line in iter(proc.stdout.readline, b""):
+                    print(f"[scrcpy-server] {line.decode('utf-8', 'ignore').strip()}")
+            except Exception as e:
+                print(f"[scrcpy-server] logging error: {e}")
+        import threading
+        threading.Thread(target=log_stdout, args=(self.server_proc,), daemon=True).start()
 
     async def start_ffmpeg(self) -> asyncio.subprocess.Process:
         if not shutil.which("ffmpeg"):
@@ -274,6 +297,72 @@ class ScrcpySession:
                 await asyncio.sleep(0.2)
         raise ConnectionError(f"scrcpy video socket not available: {last_error}")
 
+    async def connect_audio_socket(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        """Connect to the scrcpy audio socket (second connection before control when audio is enabled)."""
+        last_error: Exception | None = None
+        for attempt in range(30):
+            reader: asyncio.StreamReader | None = None
+            writer: asyncio.StreamWriter | None = None
+            try:
+                reader, writer = await asyncio.open_connection("127.0.0.1", self.port)
+                sock = writer.get_extra_info("socket")
+                if sock:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.audio_reader = reader
+                self.audio_writer = writer
+                self.audio_queue = asyncio.Queue(maxsize=100)
+                self.audio_task = asyncio.create_task(self._read_audio_loop())
+                self.volume_task = asyncio.create_task(self._volume_locker_loop())
+                return reader, writer
+            except (OSError, ConnectionError) as exc:
+                last_error = exc
+                if writer:
+                    writer.close()
+                    with contextlib.suppress(Exception):
+                        await writer.wait_closed()
+                await asyncio.sleep(0.1)
+        raise ConnectionError(f"scrcpy audio socket not available: {last_error}")
+
+    async def _volume_locker_loop(self) -> None:
+        """Lock the Android system media volume to 15 (maximum) every 1 second
+        so that any volume changes made on the physical phone are instantly overridden
+        and the audio capture remains at full digital output.
+        """
+        try:
+            print("[scrcpy audio] Volume locker task started")
+            while True:
+                with contextlib.suppress(Exception):
+                    run_adb(["shell", "cmd", "audio", "volume", "--stream", "3", "--set", "15"], serial=self.serial)
+                await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[scrcpy audio] Volume locker error: {e}")
+
+    async def _read_audio_loop(self) -> None:
+        """Continuously read raw audio data from the socket and buffer it.
+        We drop packets if the queue is full to prevent blocking the scrcpy server thread.
+        """
+        try:
+            print("[scrcpy audio] Connected. Reading raw PCM audio stream...")
+            while True:
+                chunk = await self.audio_reader.read(4096)
+                if not chunk:
+                    print("[scrcpy audio] Audio stream EOF")
+                    break
+                
+                # If queue is full, drop the oldest packet (non-blocking) to avoid deadlocking scrcpy server
+                if self.audio_queue.full():
+                    try:
+                        self.audio_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                await self.audio_queue.put(chunk)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[scrcpy audio] Loop exception: {e}")
+
     async def connect_control_socket(self) -> asyncio.StreamWriter:
         """Connect to the scrcpy control socket (second connection after video).
 
@@ -311,6 +400,21 @@ class ScrcpySession:
             with contextlib.suppress(Exception):
                 await self.control_writer.wait_closed()
             self.control_writer = None
+        if self.audio_writer:
+            self.audio_writer.close()
+            with contextlib.suppress(Exception):
+                await self.audio_writer.wait_closed()
+            self.audio_writer = None
+        if self.audio_task:
+            self.audio_task.cancel()
+            with contextlib.suppress(Exception):
+                await self.audio_task
+            self.audio_task = None
+        if self.volume_task:
+            self.volume_task.cancel()
+            with contextlib.suppress(Exception):
+                await self.volume_task
+            self.volume_task = None
         with contextlib.suppress(Exception):
             run_adb(["forward", "--remove", f"tcp:{self.port}"], serial=self.serial)
         if self.ffmpeg_proc and self.ffmpeg_proc.returncode is None:
@@ -480,7 +584,15 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
                     print(f"[scrcpy-server error]: {err}")
                 raise e
 
-            # Connect the control socket (second connection with control=true)
+            # If audio is enabled, connect the audio socket next
+            if options.audio:
+                try:
+                    await session.connect_audio_socket()
+                    print(f"[scrcpy] audio socket connected for {serial}")
+                except ConnectionError as e:
+                    print(f"[scrcpy] WARNING: audio socket failed: {e}")
+
+            # Connect the control socket (third connection if audio, second if no audio)
             try:
                 await session.connect_control_socket()
                 print(f"[scrcpy] control socket connected for {serial}")
@@ -517,3 +629,20 @@ async def stream_h264_chunks(serial: str, options: StreamOptions):
                 await writer.wait_closed()
         if session:
             await session.close()
+
+
+async def stream_audio_pcm(serial: str):
+    """Retrieve raw audio PCM packets from the active session."""
+    session = ACTIVE_SESSIONS.get(serial)
+    if not session or not session.audio_queue:
+        print(f"[scrcpy audio] No active session or audio queue for {serial}")
+        return
+
+    try:
+        while True:
+            payload = await session.audio_queue.get()
+            yield payload
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"[scrcpy audio] stream exception: {e}")

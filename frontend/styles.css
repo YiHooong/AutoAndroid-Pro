@@ -396,3 +396,37 @@ button.streaming-active:hover {
   font-family: inherit;
   vertical-align: middle;
 }
+
+/* Premium Floating Buttons Style */
+.float-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: rgba(255,255,255,0.8) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  transition: all 0.2s ease-in-out;
+  opacity: 0.3;
+  box-shadow: none !important;
+}
+
+.float-btn:hover {
+  opacity: 1 !important;
+  background: rgba(0, 255, 102, 0.15) !important;
+  border-color: rgba(0, 255, 102, 0.3) !important;
+  color: #00ff66 !important;
+}
+
+.float-btn.active {
+  background: rgba(0, 255, 102, 0.25) !important;
+  border: 1px solid rgba(0, 255, 102, 0.4) !important;
+  color: #00ff66 !important;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.3) !important;
+  opacity: 0.8 !important;
+}

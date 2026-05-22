@@ -3,8 +3,8 @@ from __future__ import annotations
 import contextlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -102,6 +102,20 @@ def devices():
         return {"devices": [device.__dict__ for device in adb.list_devices()]}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+@app.get("/api/devices/{serial}/screenshot")
+def capture_screenshot(serial: str):
+    """Capture a screenshot from the device using adb exec-out screencap -p."""
+    try:
+        import subprocess
+        from .adb import ADB_BIN
+        cmd = [ADB_BIN, "-s", serial, "exec-out", "screencap", "-p"]
+        proc = subprocess.run(cmd, capture_output=True, timeout=8)
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail="Screencap failed")
+        return Response(content=proc.stdout, media_type="image/png")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 
 @app.post("/api/connect")
@@ -335,6 +349,7 @@ async def scrcpy_ws(
     max_fps: int = Query(default=60, ge=0),
     bit_rate: str = Query(default="8M"),
     chunk_size: int = Query(default=4096, ge=0),
+    audio: bool = Query(default=False),
 ):
     await websocket.accept()
     try:
@@ -344,6 +359,7 @@ async def scrcpy_ws(
             max_fps=max_fps,
             video_bit_rate=bit_rate,
             chunk_size=chunk_size,
+            audio=audio,
         )
         from .scrcpy import get_broadcaster, send_touch_control
         broadcaster = await get_broadcaster(device)
@@ -362,3 +378,93 @@ async def scrcpy_ws(
         print(f"[scrcpy] ERROR: {type(exc).__name__}: {exc}")
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason=str(exc)[:120])
+
+
+@app.websocket("/ws/audio")
+async def audio_ws(websocket: WebSocket, serial: str | None = Query(default=None)):
+    """Stream raw real-time PCM audio bytes directly over WebSocket for ultra-low latency playback."""
+    await websocket.accept()
+    try:
+        from .scrcpy import stream_audio_pcm, ACTIVE_SESSIONS
+        # Wait for the session and its audio queue to be fully connected
+        for _ in range(60):
+            session = ACTIVE_SESSIONS.get(serial)
+            if session and session.audio_queue:
+                break
+            await asyncio.sleep(0.1)
+        else:
+            print(f"[scrcpy audio ws] Timeout waiting for session/audio_queue for {serial}")
+            await websocket.close(code=1011, reason="Session not active")
+            return
+
+        async for chunk in stream_audio_pcm(serial):
+            await websocket.send_bytes(chunk)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        print(f"[scrcpy audio ws] ERROR: {exc}")
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011, reason=str(exc)[:120])
+
+
+@app.get("/api/devices/{serial}/audio")
+async def get_audio_stream(serial: str):
+    """Serve a transcoded real-time MP3 audio stream for standard browser playing."""
+    from .scrcpy import stream_audio_pcm, ACTIVE_SESSIONS
+    
+    # Wait for the session and its audio queue to be fully connected
+    for _ in range(60):
+        session = ACTIVE_SESSIONS.get(serial)
+        if session and session.audio_queue:
+            break
+        await asyncio.sleep(0.1)
+    else:
+        print(f"[scrcpy audio] Timeout waiting for session/audio_queue for {serial}")
+        return StreamingResponse(iter([]), media_type="audio/mpeg")
+
+    # We transcode the raw s16le PCM (48000Hz, stereo) stream into MP3
+    cmd = [
+        "ffmpeg",
+        "-hide_banner", "-loglevel", "warning",
+        "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", "pipe:0",
+        "-c:a", "libmp3lame", "-q:a", "4",
+        "-f", "mp3",
+        "pipe:1"
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    
+    async def feed_pcm():
+        try:
+            async for chunk in stream_audio_pcm(serial):
+                if proc.stdin and not proc.stdin.is_closing():
+                    proc.stdin.write(chunk)
+                    await proc.stdin.drain()
+        except Exception:
+            pass
+        finally:
+            if proc.stdin:
+                with contextlib.suppress(Exception):
+                    proc.stdin.close()
+                    await proc.stdin.wait_closed()
+                
+    asyncio.create_task(feed_pcm())
+    
+    async def stream_output():
+        try:
+            while True:
+                chunk = await proc.stdout.read(4096)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            if proc.returncode is None:
+                proc.terminate()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(proc.wait(), timeout=1)
+
+    return StreamingResponse(stream_output(), media_type="audio/mpeg")
