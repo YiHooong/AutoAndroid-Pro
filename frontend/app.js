@@ -910,6 +910,7 @@ $("fullscreenBtn").addEventListener("click", () => {
 function updateNavOverlayVisibility() {
   if (!state.ws) {
     if ($("navOverlay")) $("navOverlay").style.display = "none";
+    if ($("phoneCanvas")) $("phoneCanvas").style.maxHeight = "100%";
     return;
   }
   const isFullscreen = !!document.fullscreenElement;
@@ -917,8 +918,10 @@ function updateNavOverlayVisibility() {
   
   if (isFullscreen || navBarBehavior === "show") {
     $("navOverlay").style.display = "flex";
+    $("phoneCanvas").style.maxHeight = "calc(100% - 60px)";
   } else {
     $("navOverlay").style.display = "none";
+    $("phoneCanvas").style.maxHeight = "100%";
   }
 }
 
