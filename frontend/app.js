@@ -40,8 +40,6 @@ const TRANSLATIONS = {
     btnKeyRecent: "任务键",
     btnKeyPower: "电源键",
     btnSendText: "发送",
-    labelSwipeDuration: "自定义滑动耗时 (毫秒)",
-    labelSmoothScroll: "启用鼠标平滑滚动",
     labelLanguage: "显示语言 / Language",
     placeholderText: "输入文本发送到手机...",
     emptyStateText: "当前无活跃画面流",
@@ -87,8 +85,6 @@ const TRANSLATIONS = {
     btnKeyRecent: "Recent",
     btnKeyPower: "Power",
     btnSendText: "Send",
-    labelSwipeDuration: "Swipe Duration Override (ms)",
-    labelSmoothScroll: "Smooth Wheel Scroll",
     labelLanguage: "Language / 语言切换",
     placeholderText: "Type text...",
     emptyStateText: "No active stream",
@@ -684,61 +680,7 @@ canvas.addEventListener("pointercancel", (event) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════
-// Scroll wheel — mapped to swipe via scrcpy touch protocol
-// ═══════════════════════════════════════════════════════
-let accumulatedDeltaY = 0;
-let isScrolling = false;
 
-canvas.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  const width = state.videoWidth;
-  const height = state.videoHeight;
-  if (!width || !height) return;
-
-  if (accumulatedDeltaY !== 0 && Math.sign(event.deltaY) !== Math.sign(accumulatedDeltaY)) {
-    accumulatedDeltaY = 0;
-  }
-  accumulatedDeltaY += event.deltaY;
-  const pt = activePoint(event);
-
-  if (isScrolling) return;
-  isScrolling = true;
-
-  setTimeout(async () => {
-    const totalDelta = accumulatedDeltaY;
-    accumulatedDeltaY = 0;
-
-    if (Math.abs(totalDelta) < 10) {
-      isScrolling = false;
-      return;
-    }
-
-    const swipeDistance = Math.min(height * 0.4, Math.max(50, Math.abs(totalDelta) * 2));
-    const startY = pt.y;
-    let endY = pt.y;
-
-    if (totalDelta > 0) {
-      endY = Math.round(Math.max(10, startY - swipeDistance));
-    } else {
-      endY = Math.round(Math.min(height - 10, startY + swipeDistance));
-    }
-
-    if (Math.abs(endY - startY) > 10) {
-      try {
-        const smooth = $("smoothScroll").checked;
-        const duration = smooth ? 250 : 80;
-        await sendSwipe({ x: pt.x, y: startY }, { x: pt.x, y: endY }, duration);
-      } catch (error) {
-        log(error.message || String(error));
-      }
-    }
-
-    setTimeout(() => {
-      isScrolling = false;
-    }, 50);
-  }, 50);
-}, { passive: false });
 
 // ═══════════════════════════════════════════════════════
 // UI event listeners
@@ -993,8 +935,6 @@ const settingsStatusArea = $("settingsStatusArea");
 
 // Inputs
 const languageSelect = $("languageSelect");
-const swipeDuration = $("swipeDuration");
-const smoothScroll = $("smoothScroll");
 const aiEndpoint = $("aiEndpoint");
 const aiKey = $("aiKey");
 const aiModelName = $("aiModelName");
@@ -1055,9 +995,6 @@ function loadAllSettings() {
   // Load General Settings
   const lang = localStorage.getItem("language") || "zh";
   languageSelect.value = lang;
-  
-  swipeDuration.value = localStorage.getItem("swipe_duration") || "";
-  smoothScroll.checked = localStorage.getItem("smooth_scroll") !== "false";
 
   // Load AI Settings
   const provider = localStorage.getItem("ai_provider") || "openai";
@@ -1149,9 +1086,6 @@ $("saveSettingsBtn").addEventListener("click", () => {
   const selectedLang = languageSelect.value;
   localStorage.setItem("language", selectedLang);
   applyLanguage(selectedLang);
-  
-  localStorage.setItem("swipe_duration", swipeDuration.value.trim());
-  localStorage.setItem("smooth_scroll", smoothScroll.checked ? "true" : "false");
 
   // Save AI settings
   localStorage.setItem("ai_provider", activeProvider);
