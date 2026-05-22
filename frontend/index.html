@@ -91,10 +91,22 @@
             <span data-i18n="titleControls">Controls</span>
           </div>
           <div class="key-grid">
-            <button data-key="KEYCODE_BACK" data-i18n="btnKeyBack">Back</button>
-            <button data-key="KEYCODE_HOME" data-i18n="btnKeyHome">Home</button>
-            <button data-key="KEYCODE_APP_SWITCH" data-i18n="btnKeyRecent">Recent</button>
-            <button data-key="KEYCODE_POWER" data-i18n="btnKeyPower">Power</button>
+            <button data-key="KEYCODE_BACK" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink: 0; opacity: 0.85;"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+              <span data-i18n="btnKeyBack">Back</span>
+            </button>
+            <button data-key="KEYCODE_HOME" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink: 0; opacity: 0.85;"><circle cx="12" cy="12" r="10"></circle></svg>
+              <span data-i18n="btnKeyHome">Home</span>
+            </button>
+            <button data-key="KEYCODE_APP_SWITCH" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink: 0; opacity: 0.85;"><rect x="4" y="4" width="16" height="16" rx="3" ry="3"></rect></svg>
+              <span data-i18n="btnKeyRecent">Recent</span>
+            </button>
+            <button data-key="KEYCODE_POWER" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink: 0; opacity: 0.85;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 1112.728 0M12 3v9"></path></svg>
+              <span data-i18n="btnKeyPower">Power</span>
+            </button>
           </div>
           <div class="text-row" style="margin-top: 8px;">
             <input id="textInput" type="text" placeholder="Type text..." />
@@ -351,6 +363,6 @@
       </div>
     </div>
 
-    <script src="/assets/app.js?v=105" type="module"></script>
+    <script src="/assets/app.js?v=106" type="module"></script>
   </body>
 </html>

@@ -810,19 +810,34 @@ canvas.addEventListener("wheel", (event) => {
   const screenH = state.videoHeight;
   if (!screenW || !screenH) return;
 
-  // Invert scroll directions for natural browser scrolling mapping:
-  const hscroll = -event.deltaX;
+  // Match Android scroll directions for natural browser scrolling mapping:
+  const hscroll = event.deltaX;
   const vscroll = -event.deltaY;
 
-  // Support deltaModes (lines or pages)
-  let scale = 1.0;
+  let hscroll_notches = 0;
+  let vscroll_notches = 0;
+
   if (event.deltaMode === 1) { // deltaMode = lines
-    scale = 40;
+    hscroll_notches = hscroll * 0.5;
+    vscroll_notches = vscroll * 0.5;
   } else if (event.deltaMode === 2) { // deltaMode = pages
-    scale = 800;
+    hscroll_notches = hscroll * 10;
+    vscroll_notches = vscroll * 10;
+  } else { // deltaMode = pixels (0)
+    // Normal mouse tick is ~100-120px. Trackpad outputs tiny delta pixels (1-10px).
+    // Map 30 pixels to 1 full notch.
+    hscroll_notches = hscroll / 30;
+    vscroll_notches = vscroll / 30;
+
+    // Minimum scroll boost threshold to prevent Android's input system from discarding tiny deltas
+    const minThreshold = 0.15;
+    if (Math.abs(hscroll_notches) > 0 && Math.abs(hscroll_notches) < minThreshold) {
+      hscroll_notches = Math.sign(hscroll_notches) * minThreshold;
+    }
+    if (Math.abs(vscroll_notches) > 0 && Math.abs(vscroll_notches) < minThreshold) {
+      vscroll_notches = Math.sign(vscroll_notches) * minThreshold;
+    }
   }
-  const hscroll_notches = (hscroll * scale) / 120;
-  const vscroll_notches = (vscroll * scale) / 120;
 
   // scrcpy native expects values in the range [-16, 16] notches.
   const hscroll_clamped = Math.max(-16, Math.min(16, hscroll_notches));
