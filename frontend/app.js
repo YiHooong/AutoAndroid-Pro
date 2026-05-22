@@ -507,6 +507,7 @@ function connectStream() {
 const SCRCPY_CONTROL = {
   TYPE_INJECT_KEYCODE: 0,
   TYPE_INJECT_TOUCH_EVENT: 2,
+  TYPE_INJECT_SCROLL_EVENT: 3,
   TYPE_BACK_OR_SCREEN_ON: 4,
   ACTION_DOWN: 0,
   ACTION_UP: 1,
@@ -546,7 +547,7 @@ function activePoint(event) {
   };
 }
 
-function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons) {
+function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons, action_button = 0) {
   // scrcpy v4 inject_touch_event: 32 bytes total
   const buf = new ArrayBuffer(32);
   const view = new DataView(buf);
@@ -560,8 +561,44 @@ function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, 
   view.setUint16(18, screenW);
   view.setUint16(20, screenH);
   view.setUint16(22, pressure);
-  view.setUint32(24, 0);          // action_button (0 for simple touch)
+  view.setUint32(24, action_button);          // action_button
   view.setUint32(28, buttons);
+  return buf;
+}
+
+function buildScrollMessage(x, y, screenW, screenH, hscrollVal, vscrollVal, buttons = 0) {
+  // scrcpy v4 inject_scroll_event: 21 bytes total
+  const buf = new ArrayBuffer(21);
+  const view = new DataView(buf);
+
+  view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_SCROLL_EVENT);
+
+  // position: 12 bytes
+  view.setInt32(1, x);
+  view.setInt32(5, y);
+  view.setUint16(9, screenW);
+  view.setUint16(11, screenH);
+
+  // hscroll Q15 conversion
+  let hscroll_norm = hscrollVal / 16;
+  hscroll_norm = Math.max(-1, Math.min(1, hscroll_norm));
+  let hscroll_q15 = Math.round(hscroll_norm * 32768);
+  if (hscroll_q15 < -32768) hscroll_q15 = -32768;
+  if (hscroll_q15 > 32767) hscroll_q15 = 32767;
+
+  // vscroll Q15 conversion
+  let vscroll_norm = vscrollVal / 16;
+  vscroll_norm = Math.max(-1, Math.min(1, vscroll_norm));
+  let vscroll_q15 = Math.round(vscroll_norm * 32768);
+  if (vscroll_q15 < -32768) vscroll_q15 = -32768;
+  if (vscroll_q15 > 32767) vscroll_q15 = 32767;
+
+  view.setInt16(13, hscroll_q15);
+  view.setInt16(15, vscroll_q15);
+
+  // buttons state
+  view.setUint32(17, buttons);
+
   return buf;
 }
 
@@ -586,13 +623,13 @@ function buildKeyEventMessage(action, keycode) {
   return buf;
 }
 
-function sendTouch(action, x, y, pressure, buttons) {
+function sendTouch(action, x, y, pressure, buttons, action_button = 0) {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
   const screenW = state.videoWidth;
   const screenH = state.videoHeight;
   if (!screenW || !screenH) return;
   // Always use pointerId=0 for single-pointer mouse (same as ws-scrcpy)
-  const msg = buildTouchMessage(action, 0, x, y, screenW, screenH, pressure, buttons);
+  const msg = buildTouchMessage(action, 0, x, y, screenW, screenH, pressure, buttons, action_button);
   state.ws.send(msg);
 }
 
@@ -626,7 +663,13 @@ async function sendSwipe(start, end, durationMs) {
 // ═══════════════════════════════════════════════════════
 
 // Prevent context menu on right-click over the canvas
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const behavior = localStorage.getItem("right_click_behavior") || "back";
+  if (behavior === "menu") {
+    showContextMenu(e.clientX, e.clientY);
+  }
+});
 
 canvas.addEventListener("pointerdown", (event) => {
   if (!state.videoWidth) return;
@@ -634,10 +677,12 @@ canvas.addEventListener("pointerdown", (event) => {
 
   // Right-click → BACK_OR_SCREEN_ON (2 bytes, type=4)
   if (event.button === 2) {
-    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_DOWN));
-      state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_UP));
-      log("key BACK (right-click)");
+    const behavior = localStorage.getItem("right_click_behavior") || "back";
+    if (behavior === "back") {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_DOWN));
+        state.rightClickActive = true;
+      }
     }
     return;  // Don't set dragStart, don't capture pointer
   }
@@ -662,7 +707,17 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 canvas.addEventListener("pointerup", (event) => {
-  if (event.button === 2) return; // right-click not tracked in dragStart
+  if (event.button === 2) {
+    const behavior = localStorage.getItem("right_click_behavior") || "back";
+    if (behavior === "back" && state.rightClickActive) {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_UP));
+      }
+      state.rightClickActive = false;
+      log("key BACK (right-click)");
+    }
+    return;
+  }
   if (!state.dragStart) return;
 
   const pt = activePoint(event);
@@ -680,12 +735,51 @@ canvas.addEventListener("pointerup", (event) => {
 });
 
 canvas.addEventListener("pointercancel", (event) => {
+  if (state.rightClickActive) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_UP));
+    }
+    state.rightClickActive = false;
+  }
   if (state.dragStart) {
     const pt = activePoint(event);
     sendTouch(SCRCPY_CONTROL.ACTION_UP, pt.x, pt.y, 0, state.dragStart.button);
     state.dragStart = null;
   }
 });
+
+canvas.addEventListener("wheel", (event) => {
+  if (!state.videoWidth) return;
+  event.preventDefault();
+
+  const pt = activePoint(event);
+  const screenW = state.videoWidth;
+  const screenH = state.videoHeight;
+  if (!screenW || !screenH) return;
+
+  // Invert scroll directions for natural browser scrolling mapping:
+  const hscroll = -event.deltaX;
+  const vscroll = -event.deltaY;
+
+  // Support deltaModes (lines or pages)
+  let scale = 1.0;
+  if (event.deltaMode === 1) { // deltaMode = lines
+    scale = 40;
+  } else if (event.deltaMode === 2) { // deltaMode = pages
+    scale = 800;
+  }
+  const hscroll_notches = (hscroll * scale) / 120;
+  const vscroll_notches = (vscroll * scale) / 120;
+
+  // scrcpy native expects values in the range [-16, 16] notches.
+  const hscroll_clamped = Math.max(-16, Math.min(16, hscroll_notches));
+  const vscroll_clamped = Math.max(-16, Math.min(16, vscroll_notches));
+
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    const msg = buildScrollMessage(pt.x, pt.y, screenW, screenH, hscroll_clamped, vscroll_clamped, 0);
+    state.ws.send(msg);
+  }
+}, { passive: false });
 
 
 
@@ -943,6 +1037,7 @@ const settingsStatusArea = $("settingsStatusArea");
 // Inputs
 const languageSelect = $("languageSelect");
 const chunkSizeSelect = $("chunkSizeSelect");
+const rightClickBehaviorSelect = $("rightClickBehaviorSelect");
 const aiEndpoint = $("aiEndpoint");
 const aiKey = $("aiKey");
 const aiModelName = $("aiModelName");
@@ -1005,6 +1100,7 @@ function loadAllSettings() {
   languageSelect.value = lang;
 
   chunkSizeSelect.value = localStorage.getItem("chunk_size_select") || "0";
+  rightClickBehaviorSelect.value = localStorage.getItem("right_click_behavior") || "back";
 
   // Load AI Settings
   const provider = localStorage.getItem("ai_provider") || "openai";
@@ -1098,6 +1194,7 @@ $("saveSettingsBtn").addEventListener("click", () => {
   applyLanguage(selectedLang);
 
   localStorage.setItem("chunk_size_select", chunkSizeSelect.value);
+  localStorage.setItem("right_click_behavior", rightClickBehaviorSelect.value);
 
   // Save AI settings
   localStorage.setItem("ai_provider", activeProvider);
@@ -1116,4 +1213,106 @@ $("saveSettingsBtn").addEventListener("click", () => {
     settingsModal.style.display = "none";
   }, 1200);
 });
+
+// Custom Context Menu Actions & Display
+function showContextMenu(clientX, clientY) {
+  const menu = $("customContextMenu");
+  if (!menu) return;
+
+  // Position context menu, adjusting if it goes off viewport boundaries
+  menu.style.display = "block";
+  const menuWidth = 180;
+  const menuHeight = 220;
+  let left = clientX;
+  let top = clientY;
+
+  if (clientX + menuWidth > window.innerWidth) {
+    left = window.innerWidth - menuWidth - 10;
+  }
+  if (clientY + menuHeight > window.innerHeight) {
+    top = window.innerHeight - menuHeight - 10;
+  }
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  // Animation trigger
+  setTimeout(() => {
+    menu.style.opacity = "1";
+    menu.style.transform = "scale(1)";
+    menu.style.pointerEvents = "auto";
+  }, 10);
+
+  const hideMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.style.opacity = "0";
+      menu.style.transform = "scale(0.95)";
+      menu.style.pointerEvents = "none";
+      setTimeout(() => {
+        menu.style.display = "none";
+      }, 150);
+      document.removeEventListener("click", hideMenu);
+      document.removeEventListener("contextmenu", hideMenu);
+    }
+  };
+
+  setTimeout(() => {
+    document.addEventListener("click", hideMenu);
+    document.addEventListener("contextmenu", hideMenu);
+  }, 50);
+}
+
+function registerContextMenuActions() {
+  const actions = {
+    menuItemBack: { key: "BACK", code: 4 },
+    menuItemHome: { key: "HOME", code: 3 },
+    menuItemAppSwitch: { key: "APP_SWITCH", code: 187 },
+    menuItemPower: { key: "POWER", code: 26 },
+    menuItemVolumeUp: { key: "VOLUME_UP", code: 24 },
+    menuItemVolumeDown: { key: "VOLUME_DOWN", code: 25 },
+  };
+
+  Object.entries(actions).forEach(([id, info]) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("click", async () => {
+      // Hide menu immediately
+      const menu = $("customContextMenu");
+      if (menu) {
+        menu.style.opacity = "0";
+        menu.style.transform = "scale(0.95)";
+        menu.style.pointerEvents = "none";
+        setTimeout(() => { menu.style.display = "none"; }, 150);
+      }
+
+      // Snappy WebSocket injection or robust HTTP fallback
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        if (info.key === "BACK") {
+          state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_DOWN));
+          setTimeout(() => {
+            state.ws.send(buildBackOrScreenOn(SCRCPY_CONTROL.ACTION_UP));
+          }, 50);
+        } else {
+          state.ws.send(buildKeyEventMessage(SCRCPY_CONTROL.ACTION_DOWN, info.code));
+          setTimeout(() => {
+            state.ws.send(buildKeyEventMessage(SCRCPY_CONTROL.ACTION_UP, info.code));
+          }, 50);
+        }
+        log(`key ${info.key} (via ws)`);
+      } else {
+        const serial = $("deviceSelect").value;
+        if (serial) {
+          await api(`/api/devices/${encodeURIComponent(serial)}/keyevent`, {
+            method: "POST",
+            body: JSON.stringify({ key: info.key }),
+          });
+          log(`key ${info.key} (via api)`);
+        }
+      }
+    });
+  });
+}
+
+// Register action hooks on load
+registerContextMenuActions();
 

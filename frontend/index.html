@@ -213,6 +213,15 @@
                 </select>
                 <span data-i18n="labelChunkSizeTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。</span>
               </div>
+              <!-- Right-Click Action Option -->
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+                <span data-i18n="labelRightClickBehavior" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">鼠标右键行为 (Right-Click Behavior):</span>
+                <select id="rightClickBehaviorSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <option value="back">触发返回键 / Back Key (默认)</option>
+                  <option value="menu">弹出自定义右键菜单 / Context Menu</option>
+                </select>
+                <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“触发返回键”时，右键直接在投屏区域模拟物理返回。选择“弹出自定义右键菜单”时，右键点击将展开功能操作列表（如返回、主页、任务、音量控制等）。</span>
+              </div>
             </div>
           </div>
 
@@ -269,6 +278,36 @@
             <div id="settingsStatusArea" style="display: none; padding: 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.4; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; word-break: break-all;"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Beautiful Glassmorphism Floating Context Menu -->
+    <div id="customContextMenu" style="display: none; position: fixed; z-index: 9999; width: 180px; background: rgba(17, 20, 24, 0.85); backdrop-filter: blur(14px) saturate(180%); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 6px 0; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); font-family: 'Inter', sans-serif; transition: opacity 0.15s ease, transform 0.15s ease; opacity: 0; transform: scale(0.95); pointer-events: none;">
+      <div class="context-item" id="menuItemBack" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+        <span>返回 / Back</span>
+      </div>
+      <div class="context-item" id="menuItemHome" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        <span>主页 / Home</span>
+      </div>
+      <div class="context-item" id="menuItemAppSwitch" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+        <span>任务切换 / Recents</span>
+      </div>
+      <div style="height: 1px; background: rgba(255, 255, 255, 0.05); margin: 4px 0;"></div>
+      <div class="context-item" id="menuItemPower" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255, 59, 48, 0.15)'; this.style.color='#ff3b30'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M5.636 5.636a9 9 0 000 12.728m0 0l2.829-2.829m-2.829 2.829L3 21M12 12V3"></path></svg>
+        <span>电源键 / Power</span>
+      </div>
+      <div style="height: 1px; background: rgba(255, 255, 255, 0.05); margin: 4px 0;"></div>
+      <div class="context-item" id="menuItemVolumeUp" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+        <span>音量 + / Volume Up</span>
+      </div>
+      <div class="context-item" id="menuItemVolumeDown" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+        <span>音量 - / Volume Down</span>
       </div>
     </div>
 
