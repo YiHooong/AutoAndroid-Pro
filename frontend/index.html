@@ -252,6 +252,16 @@
                 </select>
                 <span data-i18n="labelNavBarTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：三大金刚按键（返回、主页、任务）在全屏模式下会自动显示。你可以选择在非全屏模式下是否也展示它们。</span>
               </div>
+              
+              <!-- Hide Border Option -->
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+                <span data-i18n="labelHideBorder" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">隐藏投屏区域边线 (Hide Border Line of Stream):</span>
+                <select id="hideBorderSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <option value="false">显示边线 / Show (默认)</option>
+                  <option value="true">隐藏边线 / Hide</option>
+                </select>
+                <span data-i18n="labelHideBorderTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“隐藏边线”时，系统将移除投屏画布四周的高亮黄色边框线，使画面在视觉上更加纯净。</span>
+              </div>
             </div>
           </div>
 

@@ -303,6 +303,11 @@ select {
   border-color: #f0b35a;
 }
 
+#phoneCanvas.hide-border {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 #emptyState {
   position: absolute;
   color: #6f7982;

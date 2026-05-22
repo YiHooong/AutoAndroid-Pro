@@ -925,6 +925,17 @@ function updateNavOverlayVisibility() {
   }
 }
 
+function updateBorderVisibility() {
+  const hideBorder = localStorage.getItem("hide_border") === "true";
+  const canvas = $("phoneCanvas");
+  if (!canvas) return;
+  if (hideBorder) {
+    canvas.classList.add("hide-border");
+  } else {
+    canvas.classList.remove("hide-border");
+  }
+}
+
 document.addEventListener("fullscreenchange", () => {
   const btn = $("fullscreenBtn");
   if (document.fullscreenElement) {
@@ -1130,6 +1141,7 @@ const settingsStatusArea = $("settingsStatusArea");
 const languageSelect = $("languageSelect");
 const chunkSizeSelect = $("chunkSizeSelect");
 const rightClickBehaviorSelect = $("rightClickBehaviorSelect");
+const hideBorderSelect = $("hideBorderSelect");
 const aiEndpoint = $("aiEndpoint");
 const aiKey = $("aiKey");
 const aiModelName = $("aiModelName");
@@ -1195,6 +1207,8 @@ function loadAllSettings() {
   rightClickBehaviorSelect.value = localStorage.getItem("right_click_behavior") || "back";
   const navBarSelect = $("navBarBehaviorSelect");
   if (navBarSelect) navBarSelect.value = localStorage.getItem("nav_bar_behavior") || "hide";
+  if (hideBorderSelect) hideBorderSelect.value = localStorage.getItem("hide_border") || "false";
+  updateBorderVisibility();
 
   // Load AI Settings
   const provider = localStorage.getItem("ai_provider") || "openai";
@@ -1293,6 +1307,10 @@ $("saveSettingsBtn").addEventListener("click", () => {
   if (navBarSelect) {
     localStorage.setItem("nav_bar_behavior", navBarSelect.value);
     updateNavOverlayVisibility();
+  }
+  if (hideBorderSelect) {
+    localStorage.setItem("hide_border", hideBorderSelect.value);
+    updateBorderVisibility();
   }
 
   // Save AI settings
