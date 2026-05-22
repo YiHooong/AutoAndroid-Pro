@@ -918,7 +918,7 @@ function updateNavOverlayVisibility() {
   
   if (isFullscreen || navBarBehavior === "show") {
     $("navOverlay").style.display = "flex";
-    $("phoneCanvas").style.maxHeight = "calc(100% - 60px)";
+    $("phoneCanvas").style.maxHeight = "calc(100% - 72px)";
   } else {
     $("navOverlay").style.display = "none";
     $("phoneCanvas").style.maxHeight = "100%";
