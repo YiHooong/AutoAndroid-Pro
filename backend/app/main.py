@@ -113,6 +113,15 @@ def connect_device(payload: ConnectPayload):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/disconnect")
+def disconnect_device(payload: ConnectPayload):
+    try:
+        message = adb.disconnect(payload.address)
+        return {"ok": True, "message": message}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/api/pair")
 def pair_device(payload: PairPayload):
     try:

@@ -111,3 +111,8 @@ def connect(address: str) -> str:
 def pair(address: str, code: str) -> str:
     """Run `adb pair <address> <code>` (Android 11+ wireless debugging)."""
     return run_adb(["pair", address, code], timeout=15).strip()
+
+
+def disconnect(address: str) -> str:
+    """Run `adb disconnect <address>`. Returns the raw output line."""
+    return run_adb(["disconnect", address], timeout=10).strip()

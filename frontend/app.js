@@ -905,6 +905,24 @@ $("pairBtn").addEventListener("click", async () => {
 });
 
 $("refreshDevices").addEventListener("click", () => loadDevices().catch((error) => log(error.message)));
+$("disconnectDevice").addEventListener("click", async () => {
+  const serial = $("deviceSelect").value;
+  if (!serial) return;
+  const btn = $("disconnectDevice");
+  btn.disabled = true;
+  try {
+    const data = await api("/api/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ address: serial }),
+    });
+    log(`Disconnected device: ${serial} - ${data.message || 'Success'}`);
+    await loadDevices();
+  } catch (error) {
+    log(`Disconnect failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+});
 $("connectBtn").addEventListener("click", connectStream);
 $("deviceSelect").addEventListener("change", async (event) => {
   state.selected = event.target.value;
