@@ -16,6 +16,7 @@ const state = {
   lastFpsTime: 0,
   fpsIntervalId: null,
   smoothedFps: 0,
+  keyboardControlEnabled: true,
 };
 
 const TRANSLATIONS = {
@@ -676,6 +677,30 @@ function buildKeyEventMessage(action, keycode) {
   return buf;
 }
 
+function buildSetClipboardMessage(text, paste = true) {
+  // scrcpy v2+ CONTROL_MSG_TYPE_SET_CLIPBOARD:
+  // 1 byte (type=9) + 8 bytes (sequence=0) + 1 byte (paste) + 4 bytes (textLength) + text
+  const encoder = new TextEncoder();
+  const textBytes = encoder.encode(text);
+  const len = textBytes.length;
+
+  const buf = new ArrayBuffer(14 + len);
+  const view = new DataView(buf);
+
+  view.setUint8(0, 9); // CONTROL_MSG_TYPE_SET_CLIPBOARD = 9
+  
+  // Set sequence number to 0 (8 bytes: offset 1 to 8)
+  view.setUint32(1, 0);
+  view.setUint32(5, 0);
+  
+  view.setUint8(9, paste ? 1 : 0);
+  view.setUint32(10, len); // big-endian length
+
+  const uint8 = new Uint8Array(buf);
+  uint8.set(textBytes, 14);
+  return buf;
+}
+
 function sendTouch(action, x, y, pressure, buttons, action_button = 0) {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
   const screenW = state.videoWidth;
@@ -727,6 +752,17 @@ canvas.addEventListener("contextmenu", (e) => {
 canvas.addEventListener("pointerdown", (event) => {
   if (!state.videoWidth) return;
   event.preventDefault();
+
+  // Blur any active browser input elements to restore keyboard focus to the stream
+  const activeEl = document.activeElement;
+  if (activeEl && (
+    activeEl.tagName === "INPUT" ||
+    activeEl.tagName === "TEXTAREA" ||
+    activeEl.tagName === "SELECT" ||
+    activeEl.isContentEditable
+  )) {
+    activeEl.blur();
+  }
 
   // Right-click → BACK_OR_SCREEN_ON (2 bytes, type=4)
   if (event.button === 2) {
@@ -995,12 +1031,27 @@ $("sendText").addEventListener("click", async () => {
   const serial = $("deviceSelect").value;
   const input = $("textInput");
   if (!input.value) return;
-  await api(`/api/devices/${encodeURIComponent(serial)}/text`, {
-    method: "POST",
-    body: JSON.stringify({ text: input.value }),
-  });
-  log(`text "${input.value}"`);
-  input.value = "";
+
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    const msg = buildSetClipboardMessage(input.value, true);
+    state.ws.send(msg);
+    log(`Text pasted via clipboard: "${input.value}"`);
+    input.value = "";
+  } else if (serial) {
+    await api(`/api/devices/${encodeURIComponent(serial)}/text`, {
+      method: "POST",
+      body: JSON.stringify({ text: input.value }),
+    });
+    log(`text "${input.value}" (via api)`);
+    input.value = "";
+  }
+});
+
+$("textInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    $("sendText").click();
+  }
 });
 
 loadDevices()
@@ -1465,4 +1516,90 @@ function registerContextMenuActions() {
 
 // Register action hooks on load
 registerContextMenuActions();
+
+// ═══════════════════════════════════════════════════════
+// Keyboard Control Injection (WebSocket-based Real-time typing)
+// ═══════════════════════════════════════════════════════
+const JS_TO_ANDROID_KEY = {
+  // Letters
+  KeyA: 29, KeyB: 30, KeyC: 31, KeyD: 32, KeyE: 33, KeyF: 34, KeyG: 35, KeyH: 36, KeyI: 37, KeyJ: 38, KeyK: 39, KeyL: 40, KeyM: 41, KeyN: 42, KeyO: 43, KeyP: 44, KeyQ: 45, KeyR: 46, KeyS: 47, KeyT: 48, KeyU: 49, KeyV: 50, KeyW: 51, KeyX: 52, KeyY: 53, KeyZ: 54,
+  // Digits
+  Digit0: 7, Digit1: 8, Digit2: 9, Digit3: 10, Digit4: 11, Digit5: 12, Digit6: 13, Digit7: 14, Digit8: 15, Digit9: 16,
+  // Numpad Digits & Operators
+  Numpad0: 7, Numpad1: 8, Numpad2: 9, Numpad3: 10, Numpad4: 11, Numpad5: 12, Numpad6: 13, Numpad7: 14, Numpad8: 15, Numpad9: 16,
+  NumpadEnter: 66, NumpadAdd: 81, NumpadSubtract: 69, NumpadMultiply: 17, NumpadDivide: 76, NumpadDecimal: 56,
+  // System keys
+  Enter: 66,
+  Escape: 111,
+  Backspace: 67,
+  Tab: 61,
+  Space: 62,
+  ArrowUp: 19,
+  ArrowDown: 20,
+  ArrowLeft: 21,
+  ArrowRight: 22,
+  Home: 122,
+  End: 123,
+  PageUp: 92,
+  PageDown: 93,
+  Delete: 112,
+  // Punctuation
+  Minus: 69,
+  Equal: 70,
+  BracketLeft: 71,
+  BracketRight: 72,
+  Backslash: 73,
+  Semicolon: 74,
+  Quote: 75,
+  Slash: 76,
+  Comma: 55,
+  Period: 56,
+  // Function keys
+  F1: 131, F2: 132, F3: 133, F4: 134, F5: 135, F6: 136, F7: 137, F8: 138, F9: 139, F10: 140, F11: 141, F12: 142
+};
+
+function handleGlobalKey(event, action) {
+  if (!state.keyboardControlEnabled) return;
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+
+  // Prevent keyboard injection if user is typing in standard UI fields
+  const activeEl = document.activeElement;
+  if (activeEl && (
+    activeEl.tagName === "INPUT" ||
+    activeEl.tagName === "TEXTAREA" ||
+    activeEl.tagName === "SELECT" ||
+    activeEl.isContentEditable
+  )) {
+    return;
+  }
+
+  const androidCode = JS_TO_ANDROID_KEY[event.code];
+  if (androidCode !== undefined) {
+    event.preventDefault();
+    const msg = buildKeyEventMessage(action, androidCode);
+    state.ws.send(msg);
+  }
+}
+
+document.addEventListener("keydown", (e) => handleGlobalKey(e, SCRCPY_CONTROL.ACTION_DOWN));
+document.addEventListener("keyup", (e) => handleGlobalKey(e, SCRCPY_CONTROL.ACTION_UP));
+
+// Toggle button action handler
+$("keyboardToggleBtn").addEventListener("click", () => {
+  state.keyboardControlEnabled = !state.keyboardControlEnabled;
+  const btn = $("keyboardToggleBtn");
+  if (state.keyboardControlEnabled) {
+    btn.style.background = "rgba(0, 255, 102, 0.1)";
+    btn.style.border = "1px solid rgba(0, 255, 102, 0.25)";
+    btn.style.color = "#00ff66";
+    btn.style.boxShadow = "0 0 10px rgba(0, 255, 102, 0.15)";
+    log("Keyboard control enabled / 开启键盘控制");
+  } else {
+    btn.style.background = "rgba(255, 255, 255, 0.05)";
+    btn.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+    btn.style.color = "#aab2b9";
+    btn.style.boxShadow = "none";
+    log("Keyboard control disabled / 关闭键盘控制");
+  }
+});
 
