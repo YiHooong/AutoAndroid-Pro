@@ -1119,7 +1119,7 @@ function updateNavOverlayVisibility() {
   
   if (isFullscreen || navBarBehavior === "show") {
     $("navOverlay").style.display = "flex";
-    $("phoneCanvas").style.maxHeight = "calc(100% - 72px)";
+    $("phoneCanvas").style.maxHeight = "calc(100% - 48px)";
   } else {
     $("navOverlay").style.display = "none";
     $("phoneCanvas").style.maxHeight = "100%";
@@ -1754,7 +1754,42 @@ $("floatKeyboardBtn").addEventListener("click", () => {
 function reconnectStream() {
   log("Restarting stream connection to apply settings... / 正在自动重新连接音视频流以应用设置...");
   if (state.ws) {
-    resetStream();
+    // Preserve video dimensions so canvas pointer events remain active during reconnection
+    const savedVideoWidth = state.videoWidth;
+    const savedVideoHeight = state.videoHeight;
+    const savedNativeWidth = state.nativeWidth;
+    const savedNativeHeight = state.nativeHeight;
+
+    // Close old WebSocket without triggering resetStream's canvas teardown
+    if (state.ws) {
+      state.ws.onclose = null;
+      state.ws.onerror = null;
+      state.ws.close();
+      state.ws = null;
+    }
+    if (state.audioWs) {
+      state.audioWs.onclose = null;
+      state.audioWs.close();
+      state.audioWs = null;
+    }
+    if (state.audioPlayer) {
+      state.audioPlayer.stop();
+      state.audioPlayer = null;
+    }
+    if (state.decoder) {
+      try { state.decoder.close(); } catch (e) {}
+      state.decoder = null;
+    }
+    state.parser = null;
+    stopFpsCounter();
+    stopConnectionMonitor();
+
+    // Restore dimensions so pointer handlers keep working while reconnecting
+    state.videoWidth = savedVideoWidth;
+    state.videoHeight = savedVideoHeight;
+    state.nativeWidth = savedNativeWidth;
+    state.nativeHeight = savedNativeHeight;
+
     // A tiny 400ms delay to let WS close cleanly and release ports on server/client
     setTimeout(() => {
       connectStream();

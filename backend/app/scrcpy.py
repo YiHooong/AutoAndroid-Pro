@@ -41,6 +41,7 @@ def _scrcpy_version() -> str:
 def _server_path() -> Path:
     candidates = [
         SCRCPY_SERVER_PATH,
+        "/usr/local/share/scrcpy/scrcpy-server-v4.0",
         "/usr/share/scrcpy/scrcpy-server-v4.0",
         "/usr/share/scrcpy/scrcpy-server",
         "/usr/share/scrcpy/scrcpy-server.jar",
