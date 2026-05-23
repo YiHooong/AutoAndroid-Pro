@@ -4,10 +4,10 @@ class LowLatencyAudioPlayer {
     this.channels = channels;
     this.audioCtx = null;
     this.gainNode = null;
-    this.workletNode = null;
+    this.nextStartTime = 0;
   }
 
-  async start() {
+  start() {
     if (this.audioCtx) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
@@ -17,36 +17,54 @@ class LowLatencyAudioPlayer {
     this.audioCtx = new AudioContextClass({
       sampleRate: this.sampleRate
     });
-    await this.audioCtx.audioWorklet.addModule('/assets/audio-worklet-processor.js');
     this.gainNode = this.audioCtx.createGain();
-    this.gainNode.gain.value = 1.0;
+    this.gainNode.gain.value = 1.0; // Clean 100% digital volume
     this.gainNode.connect(this.audioCtx.destination);
-    this.workletNode = new AudioWorkletNode(this.audioCtx, 'audio-ring-buffer', {
-      outputChannelCount: [2]
-    });
-    this.workletNode.connect(this.gainNode);
-    console.log("[AudioPlayer] Started with AudioWorklet ring buffer");
+    this.nextStartTime = this.audioCtx.currentTime;
+    console.log("[AudioPlayer] Started Web Audio Context with GainNode");
   }
 
   stop() {
-    if (this.workletNode) {
-      this.workletNode.disconnect();
-      this.workletNode = null;
-    }
     if (this.audioCtx) {
       this.audioCtx.close().catch(() => {});
       this.audioCtx = null;
       this.gainNode = null;
     }
+    this.nextStartTime = 0;
   }
 
   feed(arrayBuffer) {
-    if (!this.audioCtx || !this.workletNode) return;
+    if (!this.audioCtx || !this.gainNode) return;
+
     if (this.audioCtx.state === "suspended") {
       this.audioCtx.resume();
     }
-    // Zero-copy transfer of the ArrayBuffer to the worklet thread
-    this.workletNode.port.postMessage(arrayBuffer, [arrayBuffer]);
+
+    const int16 = new Int16Array(arrayBuffer);
+    const numSamples = int16.length / this.channels;
+    if (numSamples === 0) return;
+    
+    const audioBuffer = this.audioCtx.createBuffer(this.channels, numSamples, this.sampleRate);
+    const leftChannel = audioBuffer.getChannelData(0);
+    const rightChannel = audioBuffer.getChannelData(1);
+
+    for (let i = 0; i < numSamples; i++) {
+      leftChannel[i] = int16[i * 2] / 32768.0;
+      rightChannel[i] = int16[i * 2 + 1] / 32768.0;
+    }
+
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(this.gainNode);
+
+    const currentTime = this.audioCtx.currentTime;
+    if (this.nextStartTime < currentTime) {
+      // Sync up to prevent pop noise
+      this.nextStartTime = currentTime + 0.02;
+    }
+
+    source.start(this.nextStartTime);
+    this.nextStartTime += audioBuffer.duration;
   }
 }
 
@@ -572,7 +590,7 @@ function connectStream() {
   ws.binaryType = "arraybuffer";
   state.ws = ws;
 
-  ws.onopen = async () => {
+  ws.onopen = () => {
     const dev = state.devices.find(d => d.serial === serial);
     let detail = serial;
     if (dev) {
@@ -599,7 +617,7 @@ function connectStream() {
        log("Connecting real-time low-latency audio stream...");
        try {
          state.audioPlayer = new LowLatencyAudioPlayer(48000, 2);
-         await state.audioPlayer.start();
+         state.audioPlayer.start();
          if (state.audioPlayer.gainNode) {
            state.audioPlayer.gainNode.gain.value = Number($("floatVolumeSlider").value);
          }
