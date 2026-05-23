@@ -311,7 +311,7 @@ class ScrcpySession:
                     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 self.audio_reader = reader
                 self.audio_writer = writer
-                self.audio_queue = asyncio.Queue(maxsize=100)
+                self.audio_queue = asyncio.Queue(maxsize=20)
                 self.audio_task = asyncio.create_task(self._read_audio_loop())
                 self.volume_task = asyncio.create_task(self._volume_locker_loop())
                 return reader, writer
@@ -347,7 +347,7 @@ class ScrcpySession:
         try:
             print("[scrcpy audio] Connected. Reading raw PCM audio stream...")
             while True:
-                chunk = await self.audio_reader.read(4096)
+                chunk = await self.audio_reader.read(2048)
                 if not chunk:
                     print("[scrcpy audio] Audio stream EOF")
                     break
