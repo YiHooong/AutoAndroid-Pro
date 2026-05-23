@@ -18,7 +18,7 @@ class LowLatencyAudioPlayer {
       sampleRate: this.sampleRate
     });
     this.gainNode = this.audioCtx.createGain();
-    this.gainNode.gain.value = 1.0; // Clean 100% digital volume
+    this.gainNode.gain.value = 1.0;
     this.gainNode.connect(this.audioCtx.destination);
     this.nextStartTime = this.audioCtx.currentTime;
     console.log("[AudioPlayer] Started Web Audio Context with GainNode");
@@ -43,7 +43,7 @@ class LowLatencyAudioPlayer {
     const int16 = new Int16Array(arrayBuffer);
     const numSamples = int16.length / this.channels;
     if (numSamples === 0) return;
-    
+
     const audioBuffer = this.audioCtx.createBuffer(this.channels, numSamples, this.sampleRate);
     const leftChannel = audioBuffer.getChannelData(0);
     const rightChannel = audioBuffer.getChannelData(1);
@@ -59,7 +59,6 @@ class LowLatencyAudioPlayer {
 
     const currentTime = this.audioCtx.currentTime;
     if (this.nextStartTime < currentTime) {
-      // Sync up to prevent pop noise
       this.nextStartTime = currentTime + 0.02;
     }
 
@@ -511,7 +510,7 @@ function connectStream() {
           state.videoWidth = frame.displayWidth;
           state.videoHeight = frame.displayHeight;
         }
-        
+
         // Zero-copy highly optimized WebGL/Bitmap rendering path
         createImageBitmap(frame).then(bitmap => {
           ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
@@ -1119,7 +1118,7 @@ function updateNavOverlayVisibility() {
   
   if (isFullscreen || navBarBehavior === "show") {
     $("navOverlay").style.display = "flex";
-    $("phoneCanvas").style.maxHeight = "calc(100% - 48px)";
+    $("phoneCanvas").style.maxHeight = isFullscreen ? "calc(100% - 56px)" : "calc(100% - 48px)";
   } else {
     $("navOverlay").style.display = "none";
     $("phoneCanvas").style.maxHeight = "100%";
@@ -1139,10 +1138,13 @@ function updateBorderVisibility() {
 
 document.addEventListener("fullscreenchange", () => {
   const btn = $("fullscreenBtn");
+  const navOverlay = $("navOverlay");
   if (document.fullscreenElement) {
     btn.innerHTML = `<svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"></path></svg>`;
+    if (navOverlay) navOverlay.classList.add("fullscreen");
   } else {
     btn.innerHTML = `<svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>`;
+    if (navOverlay) navOverlay.classList.remove("fullscreen");
   }
   updateNavOverlayVisibility();
 });
