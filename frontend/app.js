@@ -70,7 +70,7 @@ const state = {
   lastFpsTime: 0,
   fpsIntervalId: null,
   smoothedFps: 0,
-  keyboardControlEnabled: true,
+  keyboardControlEnabled: false,
   audioForwardEnabled: false,
 };
 
@@ -304,7 +304,7 @@ class AnnexBParser {
         }
         break;
       }
-      this.onNal(this.buffer.slice(offset, nextStart));
+      this.onNal(this.buffer.subarray(offset, nextStart));
       offset = nextStart;
     }
   }
@@ -512,11 +512,13 @@ function connectStream() {
     state.decoder.configure({
       codec: "avc1.42e01f",
       optimizeForLatency: true,
+      hardwareAcceleration: "prefer-hardware",
     });
 
     let hasSeenKeyFrame = false;
     let pendingSps = null;
     let pendingPps = null;
+    let dropUntilKeyFrame = false;
 
     state.parser = new AnnexBParser((nal) => {
       try {
@@ -528,15 +530,21 @@ function connectStream() {
         const nalType = nal[offset] & 0x1f;
 
         if (nalType === 7) { // SPS
-          pendingSps = nal;
+          pendingSps = nal.slice();
           return;
         }
         if (nalType === 8) { // PPS
-          pendingPps = nal;
+          pendingPps = nal.slice();
           return;
         }
 
+        // Drop P-frames when decoder queue backs up
+        if (state.decoder.decodeQueueSize > 2) {
+          dropUntilKeyFrame = true;
+        }
+
         if (nalType === 5) { // IDR / Key Frame
+          dropUntilKeyFrame = false;
           let combined = nal;
           if (pendingSps && pendingPps) {
             combined = new Uint8Array(pendingSps.length + pendingPps.length + nal.length);
@@ -550,7 +558,7 @@ function connectStream() {
             data: combined,
           }));
           hasSeenKeyFrame = true;
-        } else if (nalType === 1 && hasSeenKeyFrame) { // Delta Frame
+        } else if (nalType === 1 && hasSeenKeyFrame && !dropUntilKeyFrame) { // Delta Frame
           state.decoder?.decode(new EncodedVideoChunk({
             type: "delta",
             timestamp: performance.now() * 1000,
@@ -688,6 +696,9 @@ const SCRCPY_CONTROL = {
   KEYCODE_HOME: 3,
   KEYCODE_APP_SWITCH: 187,
   KEYCODE_POWER: 26,
+  KEYCODE_A: 29,
+  KEYCODE_DEL: 67,
+  META_CTRL_ON: 0x1000,
 };
 
 function activePoint(event) {
@@ -779,7 +790,7 @@ function buildBackOrScreenOn(action) {
   return buf;
 }
 
-function buildKeyEventMessage(action, keycode) {
+function buildKeyEventMessage(action, keycode, metaState = 0) {
   // scrcpy v1.25 inject_keycode: 14 bytes total
   const buf = new ArrayBuffer(14);
   const view = new DataView(buf);
@@ -787,7 +798,7 @@ function buildKeyEventMessage(action, keycode) {
   view.setUint8(1, action);  // 0=DOWN, 1=UP
   view.setUint32(2, keycode);
   view.setUint32(6, 0);   // repeat
-  view.setUint32(10, 0);  // metaState
+  view.setUint32(10, metaState);  // metaState
   return buf;
 }
 
@@ -1352,6 +1363,7 @@ const languageSelect = $("languageSelect");
 const chunkSizeSelect = $("chunkSizeSelect");
 const rightClickBehaviorSelect = $("rightClickBehaviorSelect");
 const hideBorderSelect = $("hideBorderSelect");
+const imageFormatSelect = $("imageFormatSelect");
 const aiEndpoint = $("aiEndpoint");
 const aiKey = $("aiKey");
 const aiModelName = $("aiModelName");
@@ -1416,6 +1428,7 @@ function loadAllSettings() {
   chunkSizeSelect.value = localStorage.getItem("chunk_size_select") || "0";
   rightClickBehaviorSelect.value = localStorage.getItem("right_click_behavior") || "back";
   if (hideBorderSelect) hideBorderSelect.value = localStorage.getItem("hide_border") || "false";
+  if (imageFormatSelect) imageFormatSelect.value = localStorage.getItem("ai_image_format") || "auto";
   updateBorderVisibility();
 
   // Load AI Settings
@@ -1425,7 +1438,8 @@ function loadAllSettings() {
   aiKey.value = localStorage.getItem("ai_key") || "";
   aiModelName.value = localStorage.getItem("ai_model_name") || "";
   aiVersion.value = localStorage.getItem("ai_version") || "2023-06-01";
-  
+  $("aiSystemPrompt").value = localStorage.getItem("ai_system_prompt") || "";
+
   settingsStatusArea.style.display = "none";
 }
 
@@ -1502,6 +1516,83 @@ $("testAiConnectionBtn").addEventListener("click", async () => {
   }
 });
 
+// Fetch Models List
+$("fetchModelsBtn").addEventListener("click", async () => {
+  const container = $("modelListContainer");
+  const btn = $("fetchModelsBtn");
+  const provider = activeProvider;
+
+  if (provider !== "openai") {
+    container.style.display = "block";
+    container.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #8a949d;">Model listing only supported for OpenAI-compatible providers.<br>Anthropic 暂不支持获取模型列表。</div>';
+    return;
+  }
+
+  const endpoint = aiEndpoint.value.trim() || aiEndpoint.placeholder;
+  const api_key = aiKey.value.trim();
+  if (!api_key) {
+    container.style.display = "block";
+    container.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #ff3b30;">Please enter API Key first / 请先填写 API Key</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.style.opacity = "0.5";
+  container.style.display = "block";
+  container.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #aab2b9;">Loading / 加载中...</div>';
+
+  try {
+    const res = await api("/api/ai/models", {
+      method: "POST",
+      body: JSON.stringify({
+        provider,
+        endpoint,
+        api_key,
+        model_name: "",
+      }),
+    });
+
+    if (!res.ok) {
+      container.innerHTML = `<div style="padding: 10px; font-size: 12px; color: #ff3b30;">Error: ${res.error}</div>`;
+      return;
+    }
+
+    const models = res.models || [];
+    if (models.length === 0) {
+      container.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #8a949d;">No models found / 未找到模型</div>';
+      return;
+    }
+
+    container.innerHTML = "";
+    for (const modelId of models) {
+      const item = document.createElement("div");
+      item.textContent = modelId;
+      item.style.cssText = "padding: 7px 12px; font-size: 12px; font-family: 'JetBrains Mono', monospace; color: #e6ebf1; cursor: pointer; transition: all 0.15s; border-bottom: 1px solid rgba(255,255,255,0.03);";
+      item.addEventListener("mouseover", () => { item.style.background = "rgba(0,255,102,0.1)"; item.style.color = "#00ff66"; });
+      item.addEventListener("mouseout", () => { item.style.background = "transparent"; item.style.color = "#e6ebf1"; });
+      item.addEventListener("click", () => {
+        aiModelName.value = modelId;
+        container.style.display = "none";
+      });
+      container.appendChild(item);
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="padding: 10px; font-size: 12px; color: #ff3b30;">Error: ${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+  }
+});
+
+// Close model list when clicking outside
+document.addEventListener("click", (e) => {
+  const container = $("modelListContainer");
+  const btn = $("fetchModelsBtn");
+  if (container && !container.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    container.style.display = "none";
+  }
+});
+
 // Save Settings Action
 $("saveSettingsBtn").addEventListener("click", () => {
   // Save General settings
@@ -1515,6 +1606,9 @@ $("saveSettingsBtn").addEventListener("click", () => {
     localStorage.setItem("hide_border", hideBorderSelect.value);
     updateBorderVisibility();
   }
+  if (imageFormatSelect) {
+    localStorage.setItem("ai_image_format", imageFormatSelect.value);
+  }
 
   // Save AI settings
   localStorage.setItem("ai_provider", activeProvider);
@@ -1522,6 +1616,7 @@ $("saveSettingsBtn").addEventListener("click", () => {
   localStorage.setItem("ai_key", aiKey.value.trim());
   localStorage.setItem("ai_model_name", aiModelName.value.trim());
   localStorage.setItem("ai_version", aiVersion.value.trim());
+  localStorage.setItem("ai_system_prompt", $("aiSystemPrompt").value.trim());
 
   settingsStatusArea.style.display = "block";
   settingsStatusArea.style.background = "rgba(0, 255, 102, 0.1)";
@@ -1723,7 +1818,7 @@ document.addEventListener("keydown", (e) => handleGlobalKey(e, SCRCPY_CONTROL.AC
 document.addEventListener("keyup", (e) => handleGlobalKey(e, SCRCPY_CONTROL.ACTION_UP));
 
 // Toggle button action handler for floating keyboard button
-$("floatKeyboardBtn").addEventListener("click", () => {
+function toggleKeyboardControl() {
   state.keyboardControlEnabled = !state.keyboardControlEnabled;
   const btn = $("floatKeyboardBtn");
   if (state.keyboardControlEnabled) {
@@ -1733,6 +1828,11 @@ $("floatKeyboardBtn").addEventListener("click", () => {
     btn.classList.remove("active");
     log("Keyboard control disabled / 关闭键盘控制");
   }
+}
+$("floatKeyboardBtn").addEventListener("click", toggleKeyboardControl);
+$("floatKeyboardBtn").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  toggleKeyboardControl();
 });
 
 // A robust helper to stop and automatically restart the stream cleanly
@@ -1785,7 +1885,7 @@ function reconnectStream() {
 }
 
 // Audio toggle action handler for floating button
-$("floatAudioBtn").addEventListener("click", () => {
+function toggleAudioForward() {
   state.audioForwardEnabled = !state.audioForwardEnabled;
   const btn = $("floatAudioBtn");
   const icon = $("floatAudioIcon");
@@ -1829,6 +1929,11 @@ $("floatAudioBtn").addEventListener("click", () => {
     log("Audio setting changed, automatically restarting stream... / 声音设置变更，正在为您自动重启音视频流...");
     reconnectStream();
   }
+}
+$("floatAudioBtn").addEventListener("click", toggleAudioForward);
+$("floatAudioBtn").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  toggleAudioForward();
 });
 
 // Setup volume slider listener for float panel
@@ -1931,14 +2036,19 @@ function triggerAdbScreenshot() {
 }
 
 // Nav Bar overlay toggle action handler for floating button
-$("floatNavToggleBtn").addEventListener("click", () => {
+function toggleNavBar() {
   const current = localStorage.getItem("nav_bar_behavior") || "hide";
   const next = current === "show" ? "hide" : "show";
   localStorage.setItem("nav_bar_behavior", next);
-  
+
   updateNavOverlayVisibility();
   updateFloatNavBtnStyle();
   log(`Navigation bottom bar behavior changed to: ${next === "show" ? "Always Show" : "Hide in non-fullscreen"} / 虚拟导航底栏显示模式已切换为：${next === "show" ? "总是显示" : "非全屏下隐藏"}`);
+}
+$("floatNavToggleBtn").addEventListener("click", toggleNavBar);
+$("floatNavToggleBtn").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  toggleNavBar();
 });
 
 function updateFloatNavBtnStyle() {
@@ -1955,3 +2065,1156 @@ function updateFloatNavBtnStyle() {
 // Initialize styles for floating buttons
 updateFloatNavBtnStyle();
 
+// ═══════════════════════════════════════════════════════
+// AI Agent — vision-language agent loop
+// ═══════════════════════════════════════════════════════
+
+const agentState = {
+  running: false,
+  abortController: null,
+  lastCapture: null,
+};
+
+function getAgentSystemPrompt(captureInfo) {
+  const screenW = captureInfo?.imageW || state.videoWidth || 1080;
+  const screenH = captureInfo?.imageH || state.videoHeight || 1920;
+  const videoW = captureInfo?.videoW || state.videoWidth || screenW;
+  const videoH = captureInfo?.videoH || state.videoHeight || screenH;
+  const thinkingMode = isAgentThinkingEnabled();
+  const thoughtRule = thinkingMode
+    ? "The JSON thought field may contain a concise visible reasoning summary in 1-3 short sentences."
+    : "Keep the JSON thought field very brief, under 20 Chinese characters or 12 English words.";
+  // Check for user-customized prompt
+  const customPrompt = (localStorage.getItem("ai_system_prompt") || "").trim();
+  if (customPrompt) {
+    return `${customPrompt}
+
+You receive a downscaled screenshot of size ${screenW}x${screenH}. The live video is ${videoW}x${videoH}.
+Return coordinates in the screenshot coordinate system only: x in [0,${screenW - 1}], y in [0,${screenH - 1}].
+${thoughtRule}
+Respond with ONLY a valid JSON object, no markdown wrapping.`;
+  }
+
+  return `You are an AI agent controlling a real Android phone. You see the phone screen through screenshots and control it by performing actions.
+
+IMPORTANT COORDINATE RULE:
+- The screenshot you see is ${screenW}x${screenH} pixels.
+- The live video is ${videoW}x${videoH}, but you must NOT output live-video coordinates.
+- Return coordinates in the screenshot image coordinate system only: x in [0,${screenW - 1}], y in [0,${screenH - 1}].
+- The app will convert your screenshot coordinates to the real device/video coordinates.
+- The screenshot has a labeled grid. Use the grid labels and choose the center of the visible UI element you want to press.
+- If you are unsure, prefer a "wait" or "fail" action instead of tapping a guessed location.
+
+== YOUR CAPABILITIES ==
+You can interact with the phone in these ways:
+1. tap — Touch the screen at a specific coordinate. Use for clicking buttons, icons, links, menu items, toggles.
+2. swipe — Drag finger from one point to another. Use for sliding, dragging, horizontal page swiping.
+3. scroll — Scroll content at a position. Use for vertical scrolling through lists, pages.
+4. type — Input text into a focused text field. Use after tapping a text input to focus it.
+5. key — Press hardware/software keys: back, home, power, enter, delete, tab, space.
+6. longpress — Press and hold a point. Use only for context menus or selecting text.
+7. wait — Do nothing, wait for screen to update (loading, animation, transition).
+
+== RESPONSE FORMAT ==
+You MUST respond with ONLY a valid JSON object (no markdown, no extra text):
+{"thought":"...","action":"...","...params..."}
+Do not use raw double quote characters inside string values. Use Chinese corner quotes or omit quotes in thought text.
+${thoughtRule}
+
+== AVAILABLE ACTIONS (with examples) ==
+
+Simple actions (execute immediately):
+  tap:     {"thought":"点击设置图标","action":"tap","x":360,"y":640}
+  swipe:   {"thought":"向左滑动页面","action":"swipe","x1":600,"y1":640,"x2":120,"y2":640,"duration_ms":300}
+  scroll:  {"thought":"向下滚动列表","action":"scroll","x":360,"y":640,"direction":"down"}
+  type:    {"thought":"替换当前输入框内容","action":"type","text":"雷军"}
+  longpress: {"thought":"长按文本区域","action":"longpress","x":360,"y":640,"duration_ms":800}
+  key:     {"thought":"按返回键","action":"key","key":"back"}
+  wait:    {"thought":"等待页面加载","action":"wait","reason":"loading"}
+
+Terminal actions:
+  done:    {"thought":"任务已完成","action":"done","summary":"成功打开设置"}
+  fail:    {"thought":"无法完成任务","action":"fail","reason":"找不到目标元素"}
+
+== PLANNING RULE ==
+Do not use a "plan" action. Never return a list of future steps with coordinates.
+Future-screen coordinates are invalid because the next screen is not visible yet.
+For multi-step tasks, choose exactly one action for the current screenshot, then wait for the next observation.
+
+When to use simple actions directly:
+- Default behavior: choose exactly one next action based on the current screenshot
+- The target UI element is visible
+- You need to navigate through multiple screens: do one action, then wait for the next screenshot
+
+== RULES ==
+- Always provide "thought" explaining your current screen analysis and plan
+- Coordinates must be within the screenshot bounds, not the full-resolution video bounds
+- Tap on clearly visible UI elements (buttons, icons, text links)
+- Focus a text field first (tap it), then type in the next step
+- The "type" action replaces the currently focused field using clipboard paste, so use it directly after focusing the input
+- Use "back" key to return to previous screen
+- Use "wait" when an action triggers loading or transition
+- If stuck after 2 attempts, use "fail"
+- When the task goal is clearly achieved, use "done"`;
+}
+
+function captureFrame() {
+  if (!canvas || canvas.style.display === "none") return null;
+  const w = canvas.width, h = canvas.height;
+  if (!w || !h) return null;
+  const dataUrl = canvas.toDataURL("image/png");
+  return dataUrl.split(",")[1];
+}
+
+// Capture frame with coordinate grid overlay for AI.
+// The AI returns coordinates in this downscaled image space; we map them back
+// to the live video coordinates before sending them to scrcpy.
+const AI_MAX_WIDTH = 720;
+function captureFrameWithGrid() {
+  if (!canvas || canvas.style.display === "none") return null;
+  const w = canvas.width, h = canvas.height;
+  if (!w || !h) return null;
+
+  const scale = Math.min(1, AI_MAX_WIDTH / w);
+  const sw = Math.round(w * scale);
+  const sh = Math.round(h * scale);
+
+  const offscreen = document.createElement("canvas");
+  offscreen.width = sw;
+  offscreen.height = sh;
+  const octx = offscreen.getContext("2d");
+
+  octx.drawImage(canvas, 0, 0, sw, sh);
+
+  // Grid overlay with labels in the actual image coordinate system sent to AI.
+  octx.strokeStyle = "rgba(0, 255, 102, 0.45)";
+  octx.lineWidth = 1;
+  const fontSize = Math.max(12, Math.round(Math.min(sw, sh) * 0.022));
+  octx.font = `bold ${fontSize}px monospace`;
+  octx.textAlign = "left";
+  octx.textBaseline = "top";
+
+  const gridSize = Math.max(80, Math.round(Math.min(sw, sh) / 8));
+
+  function drawLabel(text, x, y) {
+    const tw = octx.measureText(text).width;
+    const lh = fontSize + 4;
+    octx.fillStyle = "rgba(0, 0, 0, 0.68)";
+    octx.fillRect(x, y, tw + 6, lh);
+    octx.fillStyle = "rgba(0, 255, 102, 0.95)";
+    octx.fillText(text, x + 3, y + 2);
+  }
+
+  for (let x = gridSize; x < sw; x += gridSize) {
+    octx.beginPath();
+    octx.moveTo(x, 0);
+    octx.lineTo(x, sh);
+    octx.stroke();
+    drawLabel(`x=${x}`, x + 2, 2);
+  }
+
+  for (let y = gridSize; y < sh; y += gridSize) {
+    octx.beginPath();
+    octx.moveTo(0, y);
+    octx.lineTo(sw, y);
+    octx.stroke();
+    drawLabel(`y=${y}`, 2, y + 2);
+  }
+
+  // Resolution label
+  octx.font = `bold ${Math.max(12, Math.round(fontSize * 0.9))}px monospace`;
+  const resLabel = `AI image ${sw}x${sh}`;
+  const rw = octx.measureText(resLabel).width;
+  octx.fillStyle = "rgba(0, 0, 0, 0.68)";
+  octx.fillRect(sw - rw - 12, sh - fontSize - 10, rw + 8, fontSize + 6);
+  octx.fillStyle = "rgba(0, 255, 102, 0.95)";
+  octx.fillText(resLabel, sw - rw - 8, sh - fontSize - 7);
+
+  const dataUrl = offscreen.toDataURL("image/jpeg", 0.75);
+  return {
+    base64: dataUrl.split(",")[1],
+    imageW: sw,
+    imageH: sh,
+    videoW: w,
+    videoH: h,
+    scale,
+  };
+}
+
+// Wait until canvas has rendered content (not all-black)
+async function waitForCanvasContent(maxWaitMs = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    if (canvas.width && canvas.height) {
+      // Sample center pixel — if canvas has content, it won't be pure black
+      const imgData = ctx.getImageData(canvas.width / 2, canvas.height / 2, 1, 1);
+      if (imgData.data[3] > 0) return true; // has non-transparent content
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
+
+// Draw a brief visual indicator on the canvas showing where the agent tapped
+function drawTapIndicator(x, y) {
+  const w = state.videoWidth, h = state.videoHeight;
+  if (!w || !h) return;
+  // Convert from video coords to canvas CSS coords for drawing
+  ctx.save();
+  ctx.strokeStyle = "#ff3b30";
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.9;
+  const radius = Math.max(12, Math.min(w, h) * 0.02);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  // Crosshair
+  ctx.beginPath();
+  ctx.moveTo(x - radius * 1.5, y);
+  ctx.lineTo(x + radius * 1.5, y);
+  ctx.moveTo(x, y - radius * 1.5);
+  ctx.lineTo(x, y + radius * 1.5);
+  ctx.stroke();
+  ctx.restore();
+  // Fade out after 800ms
+  setTimeout(() => { /* next frame will overwrite */ }, 800);
+}
+
+function buildAgentMessages(task, history, screenshotBase64) {
+  const messages = [];
+  // Only keep last 2 history entries to avoid payload bloat
+  const recent = history.slice(-2);
+  for (const entry of recent) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: `Step ${entry.step}: Here is the current screenshot.` },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${entry.screenshot}` } },
+      ],
+    });
+    messages.push({
+      role: "assistant",
+      content: JSON.stringify(entry.action),
+    });
+  }
+  messages.push({
+    role: "user",
+    content: [
+      { type: "text", text: `Current task: "${task}"\nHere is the current screenshot. Return exactly one executable action for this current screen only. Do not return plan or steps. Coordinates must be reported in this screenshot image's coordinate system, not the full device resolution.\n\nOUTPUT CONTRACT: Return ONLY one minified JSON object. No analysis outside JSON. No prose outside JSON. No markdown. No text before or after the JSON.\nAllowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.\nExample: {"thought":"brief current-screen reason","action":"swipe","x1":600,"y1":800,"x2":100,"y2":800,"duration_ms":300}` },
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } },
+    ],
+  });
+  return messages;
+}
+
+function buildAgentMessagesAnthropic(task, history, screenshotBase64) {
+  const messages = [];
+  const recent = history.slice(-2);
+  for (const entry of recent) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: `Step ${entry.step}: Here is the current screenshot.` },
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: entry.screenshot } },
+      ],
+    });
+    messages.push({
+      role: "assistant",
+      content: JSON.stringify(entry.action),
+    });
+  }
+  messages.push({
+    role: "user",
+    content: [
+      { type: "text", text: `Current task: "${task}"\nHere is the current screenshot. Return exactly one executable action for this current screen only. Do not return plan or steps. Coordinates must be reported in this screenshot image's coordinate system, not the full device resolution.\n\nOUTPUT CONTRACT: Return ONLY one minified JSON object. No analysis outside JSON. No prose outside JSON. No markdown. No text before or after the JSON.\nAllowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.\nExample: {"thought":"brief current-screen reason","action":"swipe","x1":600,"y1":800,"x2":100,"y2":800,"duration_ms":300}` },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: screenshotBase64 } },
+    ],
+  });
+  return messages;
+}
+
+async function callAgentAI(systemPrompt, messages) {
+  const provider = localStorage.getItem("ai_provider") || "openai";
+  const endpoint = localStorage.getItem("ai_endpoint") || "";
+  const api_key = localStorage.getItem("ai_key") || "";
+  const model_name = localStorage.getItem("ai_model_name") || "";
+  const anthropic_version = localStorage.getItem("ai_version") || "2023-06-01";
+
+  if (!api_key) throw new Error("API Key not configured. Please set it in Settings.");
+
+  // Log payload size for debugging
+  const payload = JSON.stringify({
+    provider,
+    endpoint,
+    api_key,
+    model_name,
+    anthropic_version,
+    system_prompt: systemPrompt,
+    messages,
+  });
+  console.log(`[Agent AI] payload size: ${(payload.length / 1024).toFixed(1)} KB, messages: ${messages.length}`);
+  // Log each message's approximate image size
+  messages.forEach((m, i) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    const imgMatch = content.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
+    if (imgMatch) {
+      console.log(`[Agent AI] msg[${i}] role=${m.role} image=${(imgMatch[1].length * 0.75 / 1024).toFixed(0)} KB`);
+    }
+  });
+
+  const res = await api("/api/ai/chat", {
+    method: "POST",
+    body: payload,
+  });
+
+  if (!res.ok) throw new Error(res.error || "AI request failed");
+  return res.text;
+}
+
+function parseAgentAction(text) {
+  // Try to extract JSON from the response (handle potential markdown wrapping)
+  let jsonStr = text.trim();
+  // Remove markdown code block if present
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  }
+  // Try to find JSON object
+  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[0];
+  }
+  try {
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    const repaired = parseLooseAgentAction(jsonStr);
+    if (repaired) return repaired;
+    throw err;
+  }
+}
+
+function parseLooseAgentAction(text) {
+  const actionMatch = text.match(/"action"\s*:\s*"([^"]+)"/);
+  if (!actionMatch) return null;
+
+  const action = { action: actionMatch[1] };
+  const beforeAction = text.slice(0, actionMatch.index);
+  const thoughtMatch = beforeAction.match(/"thought"\s*:\s*([\s\S]*)$/);
+  if (thoughtMatch) {
+    action.thought = thoughtMatch[1]
+      .trim()
+      .replace(/^"/, "")
+      .replace(/",?\s*$/, "")
+      .replace(/\\"/g, "\"");
+  }
+
+  const stringFields = ["direction", "key", "text", "reason", "summary", "desc"];
+  for (const field of stringFields) {
+    const match = text.match(new RegExp(`"${field}"\\s*:\\s*"([^"]*)"`));
+    if (match) action[field] = match[1];
+  }
+
+  const numericFields = ["x", "y", "x1", "y1", "x2", "y2", "duration_ms"];
+  for (const field of numericFields) {
+    const match = text.match(new RegExp(`"${field}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`));
+    if (match) action[field] = Number(match[1]);
+  }
+
+  return action;
+}
+
+function inferActionFromText(text) {
+  const raw = String(text || "");
+  const lower = raw.toLowerCase();
+  const thought = raw.length > 180 ? `${raw.slice(0, 180)}...` : raw;
+
+  if (/等待|加载|稍等|wait/.test(lower)) {
+    return { thought, action: "wait", reason: "inferred from non-JSON response" };
+  }
+
+  if (/任务(已经|已|)完成|操作(已经|已|)完成|已经完成|已完成|成功发布|评论已发送|liked and commented|task complete|task completed/.test(lower)) {
+    return { thought, action: "done", summary: "inferred from non-JSON response" };
+  }
+
+  if (/返回|back/.test(lower)) {
+    return { thought, action: "key", key: "back" };
+  }
+
+  if (/主页|home/.test(lower) && /按|回到|返回/.test(lower)) {
+    return { thought, action: "key", key: "home" };
+  }
+
+  if (/向左|左滑|滑动到其他|其他桌面|下一屏|swipe left/.test(lower)) {
+    return { thought, action: "swipe", x1: 600, y1: 800, x2: 100, y2: 800, duration_ms: 300 };
+  }
+
+  if (/向右|右滑|上一屏|swipe right/.test(lower)) {
+    return { thought, action: "swipe", x1: 100, y1: 800, x2: 600, y2: 800, duration_ms: 300 };
+  }
+
+  if (/向下|下滑|继续往下|scroll down/.test(lower)) {
+    return { thought, action: "scroll", x: 360, y: 800, direction: "down" };
+  }
+
+  if (/向上|上滑|scroll up/.test(lower)) {
+    return { thought, action: "scroll", x: 360, y: 800, direction: "up" };
+  }
+
+  const coord = lower.match(/x\s*[=:：]\s*(\d+)[,\s，]+y\s*[=:：]\s*(\d+)/);
+  if ((/点击|tap|打开/.test(lower)) && coord) {
+    return { thought, action: "tap", x: Number(coord[1]), y: Number(coord[2]) };
+  }
+
+  return null;
+}
+
+async function repairAgentActionWithAI(aiText, task, provider) {
+  const repairMessages = [{
+    role: "user",
+    content: `Convert this invalid agent response into exactly one minified JSON action for the current screen. Do not add prose. Do not return plan or steps.\nTask: ${task}\nAllowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.\nInvalid response:\n${aiText.slice(0, 3000)}`,
+  }];
+  const repairPrompt = "You are a strict JSON formatter for an Android control agent. Return only one valid JSON object.";
+  const repairedText = await callAgentAI(repairPrompt, repairMessages);
+  console.log(`[Agent] repair response (${repairedText.length} chars):`, repairedText.substring(0, 500));
+  return parseAgentAction(repairedText);
+}
+
+function addAgentLog(step, thought, action, screenshotBase64) {
+  const logEl = $("agentLog");
+  if (!logEl) return;
+
+  const actionColors = {
+    tap: "#00ff66",
+    swipe: "#5ac8fa",
+    type: "#ffcc02",
+    key: "#ff9500",
+    scroll: "#5ac8fa",
+    longpress: "#af52de",
+    wait: "#8e8e93",
+    done: "#00ff66",
+    fail: "#ff3b30",
+    plan: "#f0b35a",
+  };
+  const color = actionColors[action.action] || "#aab2b9";
+
+  let actionDesc = action.action;
+  if (action.action === "tap") actionDesc = `tap (${action.x}, ${action.y})`;
+  else if (action.action === "swipe") actionDesc = `swipe (${action.x1},${action.y1}) → (${action.x2},${action.y2})`;
+  else if (action.action === "type") actionDesc = `type "${action.text}"`;
+  else if (action.action === "key") actionDesc = `key [${action.key}]`;
+  else if (action.action === "scroll") actionDesc = `scroll ${action.direction} at (${action.x},${action.y})`;
+  else if (action.action === "longpress") actionDesc = `longpress (${action.x}, ${action.y})`;
+  else if (action.action === "wait") actionDesc = `wait: ${action.reason || ""}`;
+  else if (action.action === "done") actionDesc = `done: ${action.summary || ""}`;
+  else if (action.action === "fail") actionDesc = `fail: ${action.reason || ""}`;
+  else if (action.action === "plan") actionDesc = `plan (${action.desc || "steps"})`;
+
+  const item = document.createElement("div");
+  item.style.cssText = "display:flex;gap:6px;align-items:flex-start;font-size:11px;padding:4px;border-radius:4px;background:rgba(255,255,255,0.02);";
+
+  let thumbHtml = "";
+  if (screenshotBase64) {
+    thumbHtml = `<img src="data:image/jpeg;base64,${screenshotBase64}" style="width:48px;height:auto;border-radius:3px;flex-shrink:0;opacity:0.8;" />`;
+  }
+
+  item.innerHTML = `
+    ${thumbHtml}
+    <div style="min-width:0;flex:1;">
+      <div style="color:${color};font-weight:600;margin-bottom:2px;">#${step} ${actionDesc}</div>
+      <div style="color:#8a949d;line-height:1.3;word-break:break-word;">${thought || ""}</div>
+    </div>
+  `;
+
+  logEl.appendChild(item);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function isAgentThinkingEnabled() {
+  const toggle = $("agentThinkingToggle");
+  if (toggle) return toggle.checked;
+  return localStorage.getItem("agent_thinking_enabled") === "true";
+}
+
+function setAgentThoughtPanelVisible(visible) {
+  const panel = $("agentThoughtPanel");
+  if (!panel) return;
+  panel.style.display = visible ? "flex" : "none";
+}
+
+function clearAgentThoughts() {
+  const content = $("agentThoughtContent");
+  if (content) content.innerHTML = "";
+  const status = $("agentThoughtStatus");
+  if (status) status.textContent = "";
+}
+
+function addAgentThought(step, title, text) {
+  if (!isAgentThinkingEnabled()) return;
+  const content = $("agentThoughtContent");
+  if (!content || !text) return;
+
+  const status = $("agentThoughtStatus");
+  if (status) status.textContent = `Step ${step}`;
+
+  const item = document.createElement("div");
+  item.style.cssText = "padding:6px 0;border-bottom:1px solid rgba(90,200,250,0.1);";
+  const clean = String(text).trim();
+  item.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:3px;">
+      <span style="color:#5ac8fa;font-weight:600;">#${step} ${escapeHtml(title || "思考")}</span>
+    </div>
+    <div style="color:#9fcfe8;word-break:break-word;white-space:pre-wrap;">${escapeHtml(clean)}</div>
+  `;
+  content.appendChild(item);
+  content.scrollTop = content.scrollHeight;
+}
+
+function clampNumber(value, min, max, fallback = min) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.round(Math.max(min, Math.min(max, num)));
+}
+
+function agentPointToVideo(x, y, captureInfo = agentState.lastCapture) {
+  const videoW = captureInfo?.videoW || state.videoWidth || 1080;
+  const videoH = captureInfo?.videoH || state.videoHeight || 1920;
+  const imageW = captureInfo?.imageW || videoW;
+  const imageH = captureInfo?.imageH || videoH;
+  const rawX = Number(x);
+  const rawY = Number(y);
+
+  // Backward compatibility: older prompts asked for full video coordinates.
+  // If a point clearly exceeds the AI image bounds but fits the video bounds,
+  // treat it as already being in video space.
+  if (
+    Number.isFinite(rawX) &&
+    Number.isFinite(rawY) &&
+    (rawX > imageW - 1 || rawY > imageH - 1) &&
+    rawX >= 0 && rawX < videoW &&
+    rawY >= 0 && rawY < videoH
+  ) {
+    return {
+      x: clampNumber(rawX, 0, videoW - 1, videoW / 2),
+      y: clampNumber(rawY, 0, videoH - 1, videoH / 2),
+      imageX: clampNumber((rawX / videoW) * imageW, 0, imageW - 1, imageW / 2),
+      imageY: clampNumber((rawY / videoH) * imageH, 0, imageH - 1, imageH / 2),
+      imageW,
+      imageH,
+      videoW,
+      videoH,
+    };
+  }
+
+  const ix = clampNumber(rawX, 0, imageW - 1, imageW / 2);
+  const iy = clampNumber(rawY, 0, imageH - 1, imageH / 2);
+
+  return {
+    x: clampNumber((ix / imageW) * videoW, 0, videoW - 1, videoW / 2),
+    y: clampNumber((iy / imageH) * videoH, 0, videoH - 1, videoH / 2),
+    imageX: ix,
+    imageY: iy,
+    imageW,
+    imageH,
+    videoW,
+    videoH,
+  };
+}
+
+function videoPointToNative(x, y, videoW, videoH) {
+  let nativeW = state.nativeWidth || videoW;
+  let nativeH = state.nativeHeight || videoH;
+  const videoIsLandscape = videoW > videoH;
+  const nativeIsLandscape = nativeW > nativeH;
+  if (videoIsLandscape !== nativeIsLandscape) {
+    [nativeW, nativeH] = [nativeH, nativeW];
+  }
+  return {
+    x: clampNumber((x / videoW) * nativeW, 0, nativeW - 1, nativeW / 2),
+    y: clampNumber((y / videoH) * nativeH, 0, nativeH - 1, nativeH / 2),
+  };
+}
+
+async function performVideoSwipe(start, end, durationMs = 320) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    sendTouch(SCRCPY_CONTROL.ACTION_DOWN, start.x, start.y, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
+    const steps = 12;
+    const stepDelay = durationMs / steps;
+    for (let i = 1; i <= steps; i++) {
+      await new Promise((r) => setTimeout(r, stepDelay));
+      const cx = Math.round(start.x + (end.x - start.x) * (i / steps));
+      const cy = Math.round(start.y + (end.y - start.y) * (i / steps));
+      sendTouch(SCRCPY_CONTROL.ACTION_MOVE, cx, cy, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
+    }
+    await new Promise((r) => setTimeout(r, 60));
+    sendTouch(SCRCPY_CONTROL.ACTION_UP, end.x, end.y, 0, SCRCPY_CONTROL.BUTTON_PRIMARY);
+  } else {
+    const nativeStart = videoPointToNative(start.x, start.y, start.videoW, start.videoH);
+    const nativeEnd = videoPointToNative(end.x, end.y, end.videoW, end.videoH);
+    await sendSwipe(nativeStart, nativeEnd, durationMs);
+  }
+}
+
+async function sendKeyPress(keycode, metaState = 0, holdMs = 50) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(buildKeyEventMessage(SCRCPY_CONTROL.ACTION_DOWN, keycode, metaState));
+    await new Promise((r) => setTimeout(r, holdMs));
+    state.ws.send(buildKeyEventMessage(SCRCPY_CONTROL.ACTION_UP, keycode, metaState));
+  } else {
+    const serial = $("deviceSelect").value;
+    await api(`/api/devices/${encodeURIComponent(serial)}/keyevent`, {
+      method: "POST",
+      body: JSON.stringify({ key: keycode }),
+    });
+  }
+}
+
+async function replaceFocusedText(text) {
+  const value = String(text ?? "");
+  if (!value) return;
+
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    // Replace existing field content first. Android text fields usually honor
+    // Ctrl+A from a hardware/scrcpy keyboard event, then DEL clears it.
+    await sendKeyPress(SCRCPY_CONTROL.KEYCODE_A, SCRCPY_CONTROL.META_CTRL_ON, 80);
+    await new Promise((r) => setTimeout(r, 80));
+    await sendKeyPress(SCRCPY_CONTROL.KEYCODE_DEL, 0, 60);
+    await new Promise((r) => setTimeout(r, 80));
+    state.ws.send(buildSetClipboardMessage(value, true));
+    log(`Agent paste text via clipboard: "${value}"`);
+    return;
+  }
+
+  const serial = $("deviceSelect").value;
+  await api(`/api/devices/${encodeURIComponent(serial)}/text`, {
+    method: "POST",
+    body: JSON.stringify({ text: value }),
+  });
+}
+
+async function executeAgentAction(action) {
+  const captureInfo = agentState.lastCapture;
+
+  switch (action.action) {
+    case "tap": {
+      const pt = agentPointToVideo(action.x, action.y, captureInfo);
+      log(`Agent tap: image(${pt.imageX}, ${pt.imageY}) → video(${pt.x}, ${pt.y})`);
+      console.log(`[Agent] tap image=${pt.imageX},${pt.imageY}/${pt.imageW}x${pt.imageH} video=${pt.x},${pt.y}/${pt.videoW}x${pt.videoH} native=${state.nativeWidth}x${state.nativeHeight}`);
+      drawTapIndicator(pt.x, pt.y);
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        sendTouch(SCRCPY_CONTROL.ACTION_DOWN, pt.x, pt.y, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
+        await new Promise((r) => setTimeout(r, 80));
+        sendTouch(SCRCPY_CONTROL.ACTION_UP, pt.x, pt.y, 0, SCRCPY_CONTROL.BUTTON_PRIMARY);
+        console.log(`[Agent] WS touch sent at (${pt.x}, ${pt.y})`);
+      } else {
+        const native = videoPointToNative(pt.x, pt.y, pt.videoW, pt.videoH);
+        console.log(`[Agent] WS not open, adb tap(${native.x}, ${native.y})`);
+        await sendTap(native);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      break;
+    }
+    case "swipe": {
+      const start = agentPointToVideo(action.x1, action.y1, captureInfo);
+      const end = agentPointToVideo(action.x2, action.y2, captureInfo);
+      log(`Agent swipe: image(${start.imageX},${start.imageY})→(${end.imageX},${end.imageY}) video(${start.x},${start.y})→(${end.x},${end.y})`);
+      await performVideoSwipe(start, end, action.duration_ms || 300);
+      await new Promise((r) => setTimeout(r, 500));
+      break;
+    }
+    case "longpress": {
+      const pt = agentPointToVideo(action.x, action.y, captureInfo);
+      const duration = Math.max(300, Number(action.duration_ms) || 800);
+      log(`Agent longpress: image(${pt.imageX}, ${pt.imageY}) → video(${pt.x}, ${pt.y})`);
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        sendTouch(SCRCPY_CONTROL.ACTION_DOWN, pt.x, pt.y, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
+        await new Promise((r) => setTimeout(r, duration));
+        sendTouch(SCRCPY_CONTROL.ACTION_UP, pt.x, pt.y, 0, SCRCPY_CONTROL.BUTTON_PRIMARY);
+      } else {
+        const native = videoPointToNative(pt.x, pt.y, pt.videoW, pt.videoH);
+        await sendSwipe(native, native, duration);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      break;
+    }
+    case "type": {
+      await replaceFocusedText(action.text);
+      await new Promise((r) => setTimeout(r, 500));
+      break;
+    }
+    case "key": {
+      const keyMap = {
+        back: SCRCPY_CONTROL.KEYCODE_BACK,
+        home: SCRCPY_CONTROL.KEYCODE_HOME,
+        power: SCRCPY_CONTROL.KEYCODE_POWER,
+        enter: 66,
+        delete: 67,
+        del: 67,
+        tab: 61,
+        space: 62,
+      };
+      const keycode = keyMap[(action.key || "").toLowerCase()] || action.key;
+      await sendKeyPress(keycode);
+      await new Promise((r) => setTimeout(r, 300));
+      break;
+    }
+    case "scroll": {
+      const imageW = captureInfo?.imageW || state.videoWidth || 1080;
+      const imageH = captureInfo?.imageH || state.videoHeight || 1920;
+      const pt = agentPointToVideo(
+        action.x ?? imageW / 2,
+        action.y ?? imageH / 2,
+        captureInfo
+      );
+      const dir = (action.direction || "down").toLowerCase();
+      const marginX = Math.max(80, Math.round(pt.videoW * 0.12));
+      const marginY = Math.max(160, Math.round(pt.videoH * 0.16));
+      const travelX = Math.max(180, Math.round(pt.videoW * 0.45));
+      const travelY = Math.max(420, Math.round(pt.videoH * 0.42));
+      const cx = clampNumber(pt.x, marginX, pt.videoW - marginX - 1, pt.videoW / 2);
+      const cy = clampNumber(pt.y, marginY, pt.videoH - marginY - 1, pt.videoH / 2);
+      const start = { ...pt, x: cx, y: cy };
+      const end = { ...pt, x: cx, y: cy };
+
+      if (dir === "down") {
+        end.y = clampNumber(cy - travelY, marginY, pt.videoH - marginY - 1, cy - travelY);
+      } else if (dir === "up") {
+        end.y = clampNumber(cy + travelY, marginY, pt.videoH - marginY - 1, cy + travelY);
+      } else if (dir === "right") {
+        end.x = clampNumber(cx - travelX, marginX, pt.videoW - marginX - 1, cx - travelX);
+      } else if (dir === "left") {
+        end.x = clampNumber(cx + travelX, marginX, pt.videoW - marginX - 1, cx + travelX);
+      }
+
+      log(`Agent scroll ${dir}: swipe video(${start.x},${start.y})→(${end.x},${end.y})`);
+      await performVideoSwipe(start, end, action.duration_ms || 420);
+      await new Promise((r) => setTimeout(r, 700));
+      break;
+    }
+    case "wait":
+      await new Promise((r) => setTimeout(r, 1500));
+      break;
+    case "done":
+    case "fail":
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// Plan Panel — shows execution plan for user review
+// ═══════════════════════════════════════════════════════
+
+let planResolve = null; // resolves with steps array or null (cancelled)
+
+function showPlanPanel(steps, thought) {
+  return new Promise((resolve) => {
+    planResolve = resolve;
+    const panel = $("planPanel");
+    const thoughtEl = $("planThought");
+    const stepsEl = $("planSteps");
+
+    // Show thought
+    thoughtEl.textContent = thought || "Execution plan";
+
+    // Render steps
+    renderPlanSteps(steps);
+
+    // Show panel with animation
+    panel.style.display = "flex";
+    panel.style.opacity = "0";
+    panel.style.transform = "translateX(20px)";
+    requestAnimationFrame(() => {
+      panel.style.transition = "opacity 0.35s ease, transform 0.35s cubic-bezier(0.4,0,0.2,1)";
+      panel.style.opacity = "1";
+      panel.style.transform = "translateX(0)";
+    });
+
+    // Animate canvas to the left
+    const phoneCanvas = $("phoneCanvas");
+    if (phoneCanvas) {
+      phoneCanvas.style.transition = "transform 0.4s cubic-bezier(0.4,0,0.2,1)";
+      phoneCanvas.style.transform = "translateX(-180px)";
+    }
+
+    // Hide agent panel while plan is showing
+    const agentPanel = $("agentPanel");
+    if (agentPanel) agentPanel.style.display = "none";
+  });
+}
+
+function renderPlanSteps(steps) {
+  const stepsEl = $("planSteps");
+  stepsEl.innerHTML = "";
+  steps.forEach((step, i) => {
+    const div = document.createElement("div");
+    div.className = "plan-step";
+    div.dataset.index = i;
+    div.innerHTML = `
+      <span class="step-num">${i + 1}</span>
+      <textarea class="step-desc" rows="1" spellcheck="false">${escapeHtml(step.desc || "")}</textarea>
+      <span class="step-action-tag">${step.action || "?"}</span>
+      <button class="step-delete" title="Delete step">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    `;
+    // Auto-resize textarea
+    const textarea = div.querySelector(".step-desc");
+    textarea.addEventListener("input", () => {
+      textarea.style.height = "auto";
+      textarea.style.height = textarea.scrollHeight + "px";
+      // Update step desc in data
+      const idx = parseInt(div.dataset.index);
+      steps[idx].desc = textarea.value;
+    });
+    // Delete button
+    div.querySelector(".step-delete").addEventListener("click", () => {
+      const idx = parseInt(div.dataset.index);
+      steps.splice(idx, 1);
+      renderPlanSteps(steps);
+    });
+    stepsEl.appendChild(div);
+    // Trigger initial resize
+    requestAnimationFrame(() => {
+      textarea.style.height = "auto";
+      textarea.style.height = textarea.scrollHeight + "px";
+    });
+  });
+  // Store steps reference for later retrieval
+  stepsEl._steps = steps;
+}
+
+function hidePlanPanel() {
+  const panel = $("planPanel");
+  panel.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+  panel.style.opacity = "0";
+  panel.style.transform = "translateX(20px)";
+  setTimeout(() => {
+    panel.style.display = "none";
+  }, 260);
+
+  // Restore canvas position
+  const phoneCanvas = $("phoneCanvas");
+  if (phoneCanvas) {
+    phoneCanvas.style.transition = "transform 0.4s cubic-bezier(0.4,0,0.2,1)";
+    phoneCanvas.style.transform = "translateX(0)";
+  }
+
+  // Show agent panel again
+  const agentPanel = $("agentPanel");
+  if (agentPanel) agentPanel.style.display = "flex";
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Collect current steps from the DOM (user may have edited)
+function getPlanSteps() {
+  const stepsEl = $("planSteps");
+  const items = stepsEl.querySelectorAll(".plan-step");
+  const steps = [];
+  items.forEach((item, i) => {
+    const desc = item.querySelector(".step-desc").value;
+    // Find the original step data
+    const origSteps = stepsEl._steps || [];
+    const orig = origSteps[i] || {};
+    steps.push({ ...orig, desc });
+  });
+  return steps;
+}
+
+async function executePlan(steps, history) {
+  for (let i = 0; i < steps.length; i++) {
+    if (!agentState.running) break;
+
+    // Highlight current step in UI
+    const stepEls = $("planSteps").querySelectorAll(".plan-step");
+    stepEls.forEach((el, j) => {
+      el.classList.toggle("executing", j === i);
+      if (j === i) {
+        el.querySelector(".step-num").textContent = "▶";
+      }
+    });
+
+    const step = steps[i];
+    log(`Agent plan step ${i + 1}/${steps.length}: ${step.desc}`);
+
+    // Capture frame before action (scaled JPEG, same as agent loop)
+    const capture = captureFrameWithGrid();
+    if (capture) agentState.lastCapture = capture;
+    addAgentLog(i + 1, step.desc, step, capture?.base64);
+
+    // Execute the action
+    try {
+      await executeAgentAction(step);
+    } catch (err) {
+      log(`Agent plan step ${i + 1} error: ${err.message}`);
+    }
+
+    // Record in history
+    if (capture) {
+      history.push({ step: i + 1, screenshot: capture.base64, action: step });
+    }
+
+    // Wait for screen to update
+    await new Promise((r) => setTimeout(r, 800));
+  }
+}
+
+// Plan panel button handlers
+$("planConfirmBtn").addEventListener("click", () => {
+  if (planResolve) {
+    const steps = getPlanSteps();
+    const resolve = planResolve;
+    planResolve = null;
+    hidePlanPanel();
+    resolve(steps);
+  }
+});
+
+$("planCancelBtn").addEventListener("click", () => {
+  if (planResolve) {
+    const resolve = planResolve;
+    planResolve = null;
+    hidePlanPanel();
+    resolve(null); // null = cancelled
+  }
+});
+
+$("planCloseBtn").addEventListener("click", () => {
+  if (planResolve) {
+    const resolve = planResolve;
+    planResolve = null;
+    hidePlanPanel();
+    resolve(null);
+  }
+});
+
+$("planAddStepBtn").addEventListener("click", () => {
+  const stepsEl = $("planSteps");
+  const steps = stepsEl._steps || [];
+  steps.push({ desc: "New step", action: "tap", x: 0, y: 0 });
+  renderPlanSteps(steps);
+  // Focus the new step's textarea
+  const newTextareas = stepsEl.querySelectorAll(".step-desc");
+  const last = newTextareas[newTextareas.length - 1];
+  if (last) { last.focus(); last.select(); }
+});
+
+async function agentLoop(task) {
+  if (agentState.running) return;
+  if (!task.trim()) {
+    log("Agent: please enter a task / 请输入任务");
+    return;
+  }
+  if (!state.videoWidth) {
+    log("Agent: no active stream / 请先开始投屏");
+    return;
+  }
+
+  const provider = localStorage.getItem("ai_provider") || "openai";
+  const api_key = localStorage.getItem("ai_key") || "";
+  if (!api_key) {
+    log("Agent: API Key not configured / 请先配置 AI API Key");
+    return;
+  }
+
+  agentState.running = true;
+  agentState.abortController = new AbortController();
+  const startBtn = $("agentStartBtn");
+  const stopBtn = $("agentStopBtn");
+  const statusEl = $("agentStatus");
+  const logEl = $("agentLog");
+  if (startBtn) startBtn.disabled = true;
+  if (stopBtn) stopBtn.style.opacity = "1";
+  if (statusEl) { statusEl.textContent = "Running..."; statusEl.style.color = "#00ff66"; }
+  if (logEl) logEl.innerHTML = "";
+  clearAgentThoughts();
+  setAgentThoughtPanelVisible(isAgentThinkingEnabled());
+
+  const MAX_STEPS = 20;
+  const history = [];
+  let step = 0;
+
+  log(`Agent started: "${task}"`);
+
+  // Wait for canvas to have rendered content before first capture
+  if (statusEl) statusEl.textContent = "Waiting for frame...";
+  const hasContent = await waitForCanvasContent(3000);
+  if (!hasContent) {
+    log("Agent: canvas may be blank, proceeding anyway...");
+  }
+
+  try {
+    while (agentState.running && step < MAX_STEPS) {
+      step++;
+      if (statusEl) statusEl.textContent = `Step ${step}/${MAX_STEPS}...`;
+
+      // 1. Capture frame with coordinate grid for AI
+      const capture = captureFrameWithGrid();
+      if (!capture) {
+        log("Agent: failed to capture frame");
+        break;
+      }
+      agentState.lastCapture = capture;
+
+      // 2. Build messages and call AI
+      const systemPrompt = getAgentSystemPrompt(capture);
+      console.log(`[Agent] system prompt (${systemPrompt.length} chars):`, systemPrompt.substring(0, 300) + "...");
+      const imageFormat = localStorage.getItem("ai_image_format") || "auto";
+      const useAnthropicFormat = imageFormat === "base64" || (imageFormat === "auto" && provider === "anthropic");
+      const messages = useAnthropicFormat
+        ? buildAgentMessagesAnthropic(task, history, capture.base64)
+        : buildAgentMessages(task, history, capture.base64);
+
+      let aiText;
+      try {
+        aiText = await callAgentAI(systemPrompt, messages);
+      } catch (err) {
+        log(`Agent AI error: ${err.message}`);
+        break;
+      }
+      console.log(`[Agent] step ${step} AI response (${aiText.length} chars):`, aiText.substring(0, 500));
+      if (isAgentThinkingEnabled() && aiText && !aiText.trim().startsWith("{")) {
+        addAgentThought(step, "模型原始输出", aiText.slice(0, 1200));
+      }
+
+      // Retry once if empty response
+      if (!aiText || !aiText.trim()) {
+        console.warn(`[Agent] step ${step} got empty response, retrying...`);
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          aiText = await callAgentAI(systemPrompt, messages);
+        } catch (err) {
+          log(`Agent AI retry error: ${err.message}`);
+          break;
+        }
+        console.log(`[Agent] step ${step} retry response (${aiText.length} chars):`, aiText.substring(0, 500));
+        if (!aiText || !aiText.trim()) {
+          log(`Agent: AI returned empty response on step ${step}, stopping`);
+          break;
+        }
+      }
+
+      // 3. Parse action
+      let action;
+      try {
+        action = parseAgentAction(aiText);
+      } catch (err) {
+        log("Agent: AI returned non-JSON, trying format repair...");
+        addAgentThought(step, "格式修正", "模型没有返回可执行 JSON，正在请求它压缩成一个当前屏幕动作。");
+        try {
+          action = await repairAgentActionWithAI(aiText, task, provider);
+        } catch (repairErr) {
+          const inferred = inferActionFromText(aiText);
+          if (inferred) {
+            log(`Agent: inferred fallback action "${inferred.action}" from non-JSON response`);
+            action = inferred;
+          } else {
+            log(`Agent: failed to parse AI response: ${aiText.substring(0, 200)}`);
+            break;
+          }
+        }
+      }
+      console.log(`[Agent] step ${step} parsed action:`, JSON.stringify(action));
+      addAgentThought(step, "动作理由", action.thought || action.reason || action.summary || "");
+
+      // 4. Log
+      addAgentLog(step, action.thought, action, capture.base64);
+
+      // 5. Check terminal states
+      if (action.action === "done") {
+        log(`Agent: task completed — ${action.summary || ""}`);
+        break;
+      }
+      if (action.action === "fail") {
+        log(`Agent: task failed — ${action.reason || ""}`);
+        break;
+      }
+
+      // 5b. Plan actions are intentionally not executed. Coordinates for
+      // future screens are guesses, so continue with a fresh observation.
+      if (action.action === "plan" && Array.isArray(action.steps) && action.steps.length > 0) {
+        log(`Agent: ignored plan with ${action.steps.length} future steps; requesting a current-screen action`);
+        addAgentLog(step, action.thought, { action: "plan", desc: `${action.steps.length} steps` }, capture.base64);
+        history.push({
+          step,
+          screenshot: capture.base64,
+          action: {
+            action: "wait",
+            reason: "Model returned a plan; the app ignored it because only current-screen actions are executable.",
+          },
+        });
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+
+      // 6. Execute action
+      try {
+        await executeAgentAction(action);
+      } catch (err) {
+        log(`Agent: action execution error: ${err.message}`);
+      }
+
+      // 7. Record history
+      history.push({ step, screenshot: capture.base64, action });
+
+      // 8. Wait for screen to update
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (step >= MAX_STEPS) {
+      log(`Agent: reached max steps (${MAX_STEPS})`);
+    }
+  } finally {
+    agentState.running = false;
+    agentState.abortController = null;
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.style.opacity = "0.5";
+    if (statusEl) { statusEl.textContent = "Idle"; statusEl.style.color = "#aab2b9"; }
+    log("Agent stopped");
+  }
+}
+
+function agentStop() {
+  agentState.running = false;
+  if (agentState.abortController) {
+    agentState.abortController.abort();
+  }
+  // Cancel plan panel if open
+  if (planResolve) {
+    const resolve = planResolve;
+    planResolve = null;
+    hidePlanPanel();
+    resolve(null);
+  }
+  log("Agent: stopping...");
+}
+
+// Agent UI event bindings
+const agentThinkingToggle = $("agentThinkingToggle");
+if (agentThinkingToggle) {
+  agentThinkingToggle.checked = localStorage.getItem("agent_thinking_enabled") === "true";
+  setAgentThoughtPanelVisible(agentThinkingToggle.checked);
+  agentThinkingToggle.addEventListener("change", () => {
+    localStorage.setItem("agent_thinking_enabled", agentThinkingToggle.checked ? "true" : "false");
+    setAgentThoughtPanelVisible(agentThinkingToggle.checked);
+  });
+}
+
+$("agentStartBtn").addEventListener("click", () => {
+  const task = $("agentTask").value;
+  agentLoop(task);
+});
+
+$("agentStopBtn").addEventListener("click", () => {
+  agentStop();
+});
+
+$("agentTask").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const task = $("agentTask").value;
+    agentLoop(task);
+  }
+});

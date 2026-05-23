@@ -260,6 +260,54 @@ class AiTestPayload(BaseModel):
     anthropic_version: str | None = None
 
 
+@app.post("/api/ai/models")
+def list_ai_models(payload: AiTestPayload):
+    import json
+    import urllib.request
+    import urllib.error
+
+    provider = payload.provider.lower()
+    endpoint = payload.endpoint.strip()
+    api_key = payload.api_key.strip()
+
+    if provider != "openai":
+        return {"ok": False, "error": "Model listing is only supported for OpenAI-compatible providers"}
+
+    # Build /v1/models URL from the endpoint
+    base = endpoint.rstrip("/")
+    if base.endswith("/chat/completions"):
+        base = base[: -len("/chat/completions")]
+    if base.endswith("/v1"):
+        models_url = f"{base}/models"
+    else:
+        models_url = f"{base}/v1/models"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "User-Agent": "AutoAndroidPro/1.0",
+    }
+    try:
+        req = urllib.request.Request(models_url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=15) as response:
+            resp_json = json.loads(response.read().decode("utf-8"))
+            models = []
+            for m in resp_json.get("data", []):
+                mid = m.get("id", "")
+                if mid:
+                    models.append(mid)
+            models.sort()
+            return {"ok": True, "models": models}
+    except urllib.error.HTTPError as err:
+        try:
+            err_body = err.read().decode("utf-8")
+            err_json = json.loads(err_body)
+        except Exception:
+            err_json = err_body if "err_body" in locals() else str(err)
+        return {"ok": False, "error": f"HTTP {err.code}: {err.reason}", "detail": err_json}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @app.post("/api/ai/test")
 def test_ai_connection(payload: AiTestPayload):
     import json
@@ -336,6 +384,118 @@ def test_ai_connection(payload: AiTestPayload):
             err_json = json.loads(err_body)
         except Exception:
             err_json = err_body if 'err_body' in locals() else str(err)
+        return {"ok": False, "error": f"HTTP Error {err.code}: {err.reason}", "detail": err_json}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+class AiChatPayload(BaseModel):
+    provider: str
+    endpoint: str
+    api_key: str
+    model_name: str
+    anthropic_version: str | None = None
+    system_prompt: str = ""
+    messages: list  # [{role, content}] — content can be string or array of blocks
+
+
+@app.post("/api/ai/chat")
+def ai_chat(payload: AiChatPayload):
+    import json
+    import urllib.request
+    import urllib.error
+
+    provider = payload.provider.lower()
+    endpoint = payload.endpoint.strip()
+    api_key = payload.api_key.strip()
+    model_name = payload.model_name.strip()
+
+    # Format endpoint
+    if provider == "openai":
+        if not (endpoint.endswith("/chat/completions") or endpoint.endswith("/chat/completions/")):
+            endpoint = endpoint.rstrip("/")
+            if not endpoint.endswith("/v1"):
+                endpoint = f"{endpoint}/v1"
+            endpoint = f"{endpoint}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "AutoAndroidPro/1.0",
+        }
+        # OpenAI: system prompt as first message
+        messages = [{"role": "system", "content": payload.system_prompt}]
+        messages.extend(payload.messages)
+        body = {
+            "model": model_name,
+            "messages": messages,
+            "max_tokens": 1024,
+        }
+    else:  # anthropic
+        if not (endpoint.endswith("/messages") or endpoint.endswith("/messages/")):
+            endpoint = endpoint.rstrip("/")
+            if not endpoint.endswith("/v1"):
+                endpoint = f"{endpoint}/v1"
+            endpoint = f"{endpoint}/messages"
+        version = payload.anthropic_version or "2023-06-01"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": version,
+            "Content-Type": "application/json",
+            "User-Agent": "AutoAndroidPro/1.0",
+        }
+        body = {
+            "model": model_name,
+            "system": payload.system_prompt,
+            "messages": payload.messages,
+            "max_tokens": 1024,
+        }
+
+    try:
+        data = json.dumps(body).encode("utf-8")
+        print(f"[AI Chat] provider={provider} payload_size={len(data)} bytes")
+        req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=90) as response:
+            resp_body = response.read().decode("utf-8")
+            resp_json = json.loads(resp_body)
+
+            # Extract text from response
+            text = ""
+            if provider == "openai":
+                if "choices" in resp_json and resp_json["choices"]:
+                    choice = resp_json["choices"][0]
+                    msg = choice.get("message", {})
+                    text = msg.get("content") or ""
+                    # DeepSeek-R1 style: action may be in reasoning_content
+                    if not text:
+                        reasoning = msg.get("reasoning_content") or ""
+                        if reasoning:
+                            text = reasoning
+                            print(f"[AI Chat] using reasoning_content ({len(text)} chars)")
+                    finish = choice.get("finish_reason", "?")
+                    print(f"[AI Chat] finish_reason={finish} content_len={len(text)}")
+                    if not text:
+                        print(f"[AI Chat] EMPTY! full_msg={msg}")
+                else:
+                    print(f"[AI Chat] NO choices! keys={list(resp_json.keys())} body={resp_body[:500]}")
+            else:
+                if "content" in resp_json and resp_json["content"]:
+                    block = resp_json["content"][0]
+                    text = block.get("text") or ""
+                    stop = resp_json.get("stop_reason", "?")
+                    print(f"[AI Chat] stop_reason={stop} content_len={len(text)}")
+                    if not text:
+                        print(f"[AI Chat] EMPTY! block={block}")
+                else:
+                    print(f"[AI Chat] NO content! keys={list(resp_json.keys())} body={resp_body[:500]}")
+
+            return {"ok": True, "text": text, "raw": resp_json}
+
+    except urllib.error.HTTPError as err:
+        try:
+            err_body = err.read().decode("utf-8")
+            err_json = json.loads(err_body)
+        except Exception:
+            err_json = err_body if "err_body" in locals() else str(err)
         return {"ok": False, "error": f"HTTP Error {err.code}: {err.reason}", "detail": err_json}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

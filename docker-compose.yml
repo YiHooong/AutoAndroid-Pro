@@ -5,7 +5,7 @@ services:
     volumes:
       - adb-keys:/root/.android
     environment:
-      ADB_BIN: adb
+      ADB_BIN: /opt/platform-tools/adb
       SCRCPY_BIN: scrcpy
       # Set this if your distro installs the server in a custom location.
       # SCRCPY_SERVER_PATH: /usr/share/scrcpy/scrcpy-server
