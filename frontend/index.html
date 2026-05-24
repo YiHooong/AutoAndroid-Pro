@@ -39,12 +39,12 @@
             <span data-i18n="titleWireless">Wireless Connect</span>
           </div>
           <label>
-            <span data-i18n="labelIp">Host / IP Address</span>
-            <input id="wirelessIp" type="text" placeholder="192.168.1.100" />
+            <span data-i18n="labelIp">主机 IP 地址</span>
+            <input id="wirelessIp" type="text" placeholder="192.168.1.100" autocomplete="off" />
           </label>
           <label>
             <span data-i18n="labelPort">Port</span>
-            <input id="wirelessPort" type="text" placeholder="5555" />
+            <input id="wirelessPort" type="text" placeholder="5555" autocomplete="off" />
           </label>
           <label>
             <span data-i18n="labelPairCode">Pairing Code (Android 11+)</span>
@@ -146,7 +146,7 @@
           </button>
           
           <div id="floatAudioContainer" style="position: absolute; top: 84px; left: 16px; height: 56px; display: flex; align-items: center; gap: 8px; z-index: 50; transition: all 0.3s ease;">
-            <button id="floatAudioBtn" class="float-btn" style="flex-shrink: 0;" title="Toggle Device Audio / 开启/关闭手机声音">
+            <button id="floatAudioBtn" class="float-btn" style="flex-shrink: 0;" title="开启/关闭手机声音">
               <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" id="floatAudioIcon" style="color: rgba(255,255,255,0.8);"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
             </button>
             <div id="floatVolumePanel" style="width: 0px; overflow: hidden; opacity: 0; display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; padding: 0px; height: 56px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
@@ -155,15 +155,15 @@
             </div>
           </div>
 
-          <button id="floatScreenshotBtn" class="float-btn" style="position: absolute; top: 152px; left: 16px;" title="Take Screenshot / 截图并下载到电脑">
+          <button id="floatScreenshotBtn" class="float-btn" style="position: absolute; top: 152px; left: 16px;" title="截图并下载到电脑">
             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"></path></svg>
           </button>
 
-          <button id="floatKeyboardBtn" class="float-btn" style="position: absolute; top: 220px; left: 16px;" title="Toggle Keyboard Control / 开启/关闭键盘输入">
+          <button id="floatKeyboardBtn" class="float-btn" style="position: absolute; top: 220px; left: 16px;" title="开启/关闭键盘输入">
             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 0h1m11 0h3M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 01-1-1z"></path></svg>
           </button>
 
-          <button id="floatNavToggleBtn" class="float-btn" style="position: absolute; top: 288px; left: 16px;" title="Toggle Navigation Bar / 显示/隐藏手机虚拟导航底栏">
+          <button id="floatNavToggleBtn" class="float-btn" style="position: absolute; top: 288px; left: 16px;" title="显示/隐藏手机虚拟导航底栏">
             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
           </button>
           
@@ -197,7 +197,7 @@
               </div>
               <span id="agentStatus" style="font-size: 10px; color: #aab2b9; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">Idle</span>
             </div>
-            <input id="agentTask" type="text" placeholder="e.g. Open Settings app" style="font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 10px; color: #fff; outline: none; transition: border-color 0.2s; margin-bottom: 8px; font-family: 'Inter', sans-serif;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+            <input id="agentTask" type="text" placeholder="e.g. Open Settings app" autocomplete="off" style="font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 10px; color: #fff; outline: none; transition: border-color 0.2s; margin-bottom: 8px; font-family: 'Inter', sans-serif;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
             <div style="display: flex; gap: 6px; margin-bottom: 8px;">
               <button id="agentStartBtn" style="flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; border-radius: 6px; border: none; cursor: pointer; background: #00ff66; color: #0b0d0f; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;" onmouseover="this.style.background='#33ff85'" onmouseout="this.style.background='#00ff66'">
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"></path></svg>
@@ -211,7 +211,7 @@
             <label id="agentThinkingRow" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding: 7px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); color: #aab2b9; font-size: 11px; cursor: pointer; user-select: none;">
               <span style="display: flex; align-items: center; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: #5ac8fa; flex-shrink: 0;"><path d="M7.06431 5.93342C7.68763 5.93342 8.19307 6.43904 8.19322 7.06233C8.19322 7.68573 7.68772 8.19123 7.06431 8.19123C6.44099 8.19113 5.9354 7.68567 5.9354 7.06233C5.93555 6.43911 6.44108 5.93353 7.06431 5.93342Z" fill="currentColor"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M8.6815 0.963693C10.1169 0.447019 11.6266 0.374829 12.5633 1.31135C13.5 2.24805 13.4277 3.75776 12.911 5.19319C12.7126 5.74431 12.4386 6.31796 12.0965 6.89729C12.4969 7.54638 12.8141 8.19018 13.036 8.80647C13.5527 10.2419 13.6251 11.7516 12.6883 12.6883C11.7516 13.625 10.242 13.5527 8.8065 13.036C8.19022 12.8141 7.54641 12.4969 6.89732 12.0965C6.31797 12.4386 5.74435 12.7125 5.19322 12.911C3.75777 13.4276 2.2481 13.5 1.31138 12.5633C0.374859 11.6266 0.447049 10.1168 0.963724 8.68147C1.17185 8.10338 1.46321 7.50063 1.82896 6.8924C1.52182 6.35711 1.27235 5.82825 1.08872 5.31819C0.572068 3.88278 0.499714 2.37306 1.43638 1.43635C2.37308 0.499655 3.8828 0.572044 5.31822 1.08869C5.82828 1.27232 6.35715 1.5218 6.89243 1.82893C7.50066 1.46318 8.10341 1.17181 8.6815 0.963693ZM11.3573 8.01154C10.9083 8.62253 10.3901 9.22873 9.80943 9.8094C9.22877 10.3901 8.62255 10.9083 8.01158 11.3572C8.4257 11.5841 8.8287 11.7688 9.21275 11.9071C10.5456 12.3868 11.4246 12.2547 11.8397 11.8397C12.2548 11.4246 12.3869 10.5456 11.9071 9.21272C11.7688 8.82866 11.5841 8.42568 11.3573 8.01154ZM2.56529 8.02912C2.37344 8.39322 2.21495 8.74796 2.09263 9.08772C1.61291 10.4204 1.74512 11.2995 2.16001 11.7147C2.57505 12.1297 3.45415 12.2618 4.78697 11.7821C5.11057 11.6656 5.44786 11.5164 5.7938 11.3367C5.249 10.9223 4.70922 10.4533 4.19029 9.9344C3.57578 9.31987 3.03169 8.67633 2.56529 8.02912ZM6.90708 3.2469C6.24065 3.70479 5.5646 4.26321 4.91392 4.91389C4.26325 5.56456 3.70482 6.24063 3.24693 6.90705C3.72674 7.63325 4.32777 8.37459 5.03892 9.08576C5.64943 9.69627 6.28183 10.2265 6.90806 10.6678C7.59368 10.2025 8.2908 9.63076 8.96079 8.96076C9.6308 8.29075 10.2025 7.59366 10.6678 6.90803C10.2265 6.2818 9.69631 5.6494 9.08579 5.03889C8.37462 4.32773 7.63328 3.72672 6.90708 3.2469ZM11.7147 2.15998C11.2996 1.74509 10.4204 1.61288 9.08775 2.0926C8.74835 2.21479 8.39382 2.37271 8.03013 2.56428C8.67728 3.03065 9.31995 3.5758 9.93443 4.19026C10.4534 4.7092 10.9223 5.24896 11.3368 5.79377C11.5164 5.44785 11.6656 5.11052 11.7821 4.78694C12.2618 3.45416 12.1297 2.57502 11.7147 2.15998ZM4.91197 2.2176C3.57922 1.73788 2.70004 1.86995 2.28501 2.28498C1.87001 2.70003 1.73791 3.5792 2.21763 4.91194C2.31709 5.18822 2.44112 5.47427 2.58677 5.7674C3.01931 5.1887 3.51474 4.6158 4.06529 4.06526C4.61584 3.5147 5.18872 3.01928 5.76743 2.58674C5.47431 2.4411 5.18824 2.31706 4.91197 2.2176Z" fill="currentColor"></path></svg>
-                <span>思考模式</span>
+                <span data-i18n="agentThinkingLabel">思考模式</span>
               </span>
               <div style="position: relative; width: 36px; height: 20px; flex-shrink: 0;">
                 <input id="agentThinkingToggle" type="checkbox" style="opacity: 0; width: 0; height: 0; position: absolute;" />
@@ -326,7 +326,7 @@
             <div style="display: flex; flex-direction: column; gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); padding: 16px; border-radius: 10px;">
               <!-- Language -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                <span data-i18n="labelLanguage" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">Display Language / 显示语言:</span>
+                <span data-i18n="labelLanguage" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">显示语言:</span>
                 <select id="languageSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
                   <option value="zh">简体中文 (Chinese)</option>
                   <option value="en">English (US)</option>
@@ -334,23 +334,23 @@
               </div>
               <!-- Read Chunk Size Option -->
               <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
-                <span data-i18n="labelChunkSizeSelect" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">视频流读取数据块大小 (Chunk Size):</span>
+                <span data-i18n="labelChunkSizeSelect" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">视频流数据块大小:</span>
                 <select id="chunkSizeSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
-                  <option value="0">不设置 / Direct (0KB - 推荐，延迟更低)</option>
-                  <option value="4096">4KB (4096 字节)</option>
-                  <option value="8192">8KB (8192 字节)</option>
-                  <option value="16384">16KB (16384 字节)</option>
-                  <option value="32768">32KB (32768 字节)</option>
-                  <option value="65536">64KB (65536 字节)</option>
+                  <option data-i18n="optChunk0" value="0">不设置 (推荐)</option>
+                  <option data-i18n="optChunk4" value="4096">4KB (4096 字节)</option>
+                  <option data-i18n="optChunk8" value="8192">8KB (8192 字节)</option>
+                  <option data-i18n="optChunk16" value="16384">16KB (16384 字节)</option>
+                  <option data-i18n="optChunk32" value="32768">32KB (32768 字节)</option>
+                  <option data-i18n="optChunk64" value="65536">64KB (65536 字节)</option>
                 </select>
                 <span data-i18n="labelChunkSizeTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。</span>
               </div>
               <!-- Right-Click Action Option -->
               <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
-                <span data-i18n="labelRightClickBehavior" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">鼠标右键行为 (Right-Click Behavior):</span>
+                <span data-i18n="labelRightClickBehavior" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">鼠标右键行为:</span>
                 <select id="rightClickBehaviorSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
-                  <option value="back">触发返回键 / Back Key (默认)</option>
-                  <option value="menu">弹出自定义右键菜单 / Context Menu</option>
+                  <option data-i18n="optRightClickBack" value="back">触发返回键 (默认)</option>
+                  <option data-i18n="optRightClickMenu" value="menu">弹出自定义右键菜单</option>
                 </select>
                 <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“触发返回键”时，右键直接在投屏区域模拟物理返回。选择“弹出自定义右键菜单”时，右键点击将展开功能操作列表。</span>
               </div>
@@ -358,22 +358,22 @@
               
               <!-- Hide Border Option -->
               <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
-                <span data-i18n="labelHideBorder" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">隐藏投屏区域边线 (Hide Border Line of Stream):</span>
+                <span data-i18n="labelHideBorder" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">隐藏投屏区域边线:</span>
                 <select id="hideBorderSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
-                  <option value="false">显示边线 / Show (默认)</option>
-                  <option value="true">隐藏边线 / Hide</option>
+                  <option data-i18n="optBorderShow" value="false">显示边线 (默认)</option>
+                  <option data-i18n="optBorderHide" value="true">隐藏边线</option>
                 </select>
                 <span data-i18n=”labelHideBorderTip” style=”font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;”>提示：选择”隐藏边线”时，系统将移除投屏画布四周的高亮黄色边框线，使画面在视觉上更加纯净。</span>
               </div>
               <!-- AI Image Format Option -->
               <div style=”display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;”>
-                <span style=”font-size: 12.5px; color: #e6ebf1; font-weight: 500;”>AI 截图上传格式 (Image Upload Format):</span>
+                <span data-i18n=”aiLabelImageFormat” style=”font-size: 12.5px; color: #e6ebf1; font-weight: 500;”>AI 截图上传格式:</span>
                 <select id=”imageFormatSelect” style=”font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;” onfocus=”this.style.borderColor='rgba(0,255,102,0.4)'” onblur=”this.style.borderColor='rgba(255,255,255,0.08)'”>
-                  <option value=”auto”>自动识别 / Auto (根据服务商选择)</option>
-                  <option value=”image_url”>image_url (OpenAI 格式)</option>
-                  <option value=”base64”>base64 / image (Anthropic 格式)</option>
+                  <option data-i18n=”optFormatAuto” value=”auto”>自动识别 (根据服务商选择)</option>
+                  <option data-i18n=”optFormatImageUrl” value=”image_url”>image_url (OpenAI 格式)</option>
+                  <option data-i18n=”optFormatBase64” value=”base64”>base64 / image (Anthropic 格式)</option>
                 </select>
-                <span style=”font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;”>提示：选择”自动识别”时，系统根据 AI 服务商自动选择图片格式。如果使用的兼容 API 格式不匹配，可手动指定。</span>
+                <span data-i18n=”aiImageFormatHint” style=”font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;”>提示：选择”自动识别”时，系统根据 AI 服务商自动选择图片格式。如果使用的兼容 API 格式不匹配，可手动指定。</span>
               </div>
             </div>
           </div>
@@ -382,7 +382,7 @@
           <div id="paneAi" style="display: none; flex-direction: column; gap: 16px;">
             <!-- AI Provider Select Tabs / Toggle -->
             <div style="display: flex; flex-direction: column; gap: 6px;">
-              <span data-i18n="aiLabelProvider" style="font-size: 12px; color: #8a949d; font-weight: 500;">Select AI Provider / 选择服务商:</span>
+              <span data-i18n="aiLabelProvider" style="font-size: 12px; color: #8a949d; font-weight: 500;">选择服务商:</span>
               <div style="display: flex; gap: 10px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
                 <button id="providerOpenAiBtn" style="flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; background: #00ff66; color: #0b0d0f;">OpenAI (Compatible)</button>
                 <button id="providerAnthropicBtn" style="flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; background: transparent; color: #aab2b9;" onmouseover="if(this.style.background !== 'rgb(0, 255, 102)') { this.style.color='#fff'; this.style.background='rgba(255,255,255,0.04)'; }" onmouseout="if(this.style.background !== 'rgb(0, 255, 102)') { this.style.color='#aab2b9'; this.style.background='transparent'; }">Anthropic (Compatible)</button>
@@ -393,22 +393,22 @@
             <div style="display: flex; flex-direction: column; gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); padding: 16px; border-radius: 10px;">
               <!-- API Endpoint -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                <span data-i18n="aiLabelEndpoint" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">API Base Endpoint URL / 接口地址:</span>
+                <span data-i18n="aiLabelEndpoint" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">接口地址:</span>
                 <input id="aiEndpoint" type="text" placeholder="https://api.openai.com/v1" style="font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
               </div>
 
               <!-- API Key -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                <span data-i18n="aiLabelKey" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">API Key / 密钥:</span>
+                <span data-i18n="aiLabelKey" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">接口密钥:</span>
                 <input id="aiKey" type="password" placeholder="sk-..." style="font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
               </div>
 
               <!-- Model Name -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                <span data-i18n="aiLabelModel" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">Model Name / 模型名称:</span>
+                <span data-i18n="aiLabelModel" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">模型名称:</span>
                 <div style="display: flex; gap: 6px; position: relative;">
                   <input id="aiModelName" type="text" placeholder="gpt-4o" style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
-                  <button id="fetchModelsBtn" title="Fetch available models / 获取可用模型列表" style="flex-shrink: 0; padding: 8px 10px; font-size: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #aab2b9; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='#00ff66'; this.style.borderColor='rgba(0,255,102,0.3)'" onmouseout="this.style.color='#aab2b9'; this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <button id="fetchModelsBtn" title="获取可用模型列表" style="flex-shrink: 0; padding: 8px 10px; font-size: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #aab2b9; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='#00ff66'; this.style.borderColor='rgba(0,255,102,0.3)'" onmouseout="this.style.color='#aab2b9'; this.style.borderColor='rgba(255,255,255,0.08)'">
                     <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"></path></svg>
                     Models
                   </button>
@@ -418,16 +418,28 @@
 
               <!-- Anthropic API Version -->
               <div id="aiAnthropicExtraGroup" style="display: none; flex-direction: column; gap: 6px;">
-                <span data-i18n="aiLabelVersion" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">Anthropic Version Header / 版本头:</span>
+                <span data-i18n="aiLabelVersion" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">Anthropic 版本头:</span>
                 <input id="aiVersion" type="text" placeholder="2023-06-01" style="font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
               </div>
 
               <!-- System Prompt -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
-                <span style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">System Prompt / 系统提示词:</span>
-                <textarea id="aiSystemPrompt" rows="5" placeholder="留空使用默认提示词... / Leave empty to use default prompt..." style="font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; resize: vertical; min-height: 80px; line-height: 1.5;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
-                <span style="font-size: 11px; color: #6f7982;">留空则使用内置默认提示词。自定义内容会覆盖默认提示词。</span>
+                <span data-i18n="aiLabelSystemPrompt" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">系统提示词:</span>
+                <textarea id="aiSystemPrompt" rows="5" data-i18n-placeholder="aiSystemPromptPlaceholder" placeholder="留空使用默认提示词..." style="font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; resize: vertical; min-height: 80px; line-height: 1.5;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
+                <span data-i18n="aiSystemPromptHint" style="font-size: 11px; color: #6f7982;">留空则使用内置默认提示词。自定义内容会覆盖默认提示词。</span>
               </div>
+
+              <!-- Streaming Toggle -->
+              <label style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); cursor: pointer; user-select: none;">
+                <span style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #e6ebf1; font-weight: 500;">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: #5ac8fa; flex-shrink: 0;"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"></path></svg>
+                  <span data-i18n="aiLabelStreaming">流式传输</span>
+                </span>
+                <div style="position: relative; width: 36px; height: 20px; flex-shrink: 0;">
+                  <input id="aiStreamingToggle" type="checkbox" style="opacity: 0; width: 0; height: 0; position: absolute;" />
+                  <span class="toggle-track"></span>
+                </div>
+              </label>
             </div>
 
             <!-- Test Connection Row -->
@@ -452,29 +464,29 @@
     <div id="customContextMenu" style="display: none; position: fixed; z-index: 9999; width: 180px; background: rgba(17, 20, 24, 0.85); backdrop-filter: blur(14px) saturate(180%); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 6px 0; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); font-family: 'Inter', sans-serif; transition: opacity 0.15s ease, transform 0.15s ease; opacity: 0; transform: scale(0.95); pointer-events: none;">
       <div class="context-item" id="menuItemBack" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
-        <span>返回 / Back</span>
+        <span data-i18n="ctxMenuBack">返回</span>
       </div>
       <div class="context-item" id="menuItemHome" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-        <span>主页 / Home</span>
+        <span data-i18n="ctxMenuHome">主页</span>
       </div>
       <div class="context-item" id="menuItemAppSwitch" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"></path></svg>
-        <span>任务切换 / Recents</span>
+        <span data-i18n="ctxMenuRecents">任务切换</span>
       </div>
       <div style="height: 1px; background: rgba(255, 255, 255, 0.05); margin: 4px 0;"></div>
       <div class="context-item" id="menuItemPower" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255, 59, 48, 0.15)'; this.style.color='#ff3b30'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M5.636 5.636a9 9 0 000 12.728m0 0l2.829-2.829m-2.829 2.829L3 21M12 12V3"></path></svg>
-        <span>电源键 / Power</span>
+        <span data-i18n="ctxMenuPower">电源键</span>
       </div>
       <div style="height: 1px; background: rgba(255, 255, 255, 0.05); margin: 4px 0;"></div>
       <div class="context-item" id="menuItemVolumeUp" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-        <span>音量 + / Volume Up</span>
+        <span data-i18n="ctxMenuVolUp">音量 +</span>
       </div>
       <div class="context-item" id="menuItemVolumeDown" style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 13px; color: #e6ebf1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 255, 102, 0.15)'; this.style.color='#00ff66'" onmouseout="this.style.background='transparent'; this.style.color='#e6ebf1'">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-        <span>音量 - / Volume Down</span>
+        <span data-i18n="ctxMenuVolDown">音量 -</span>
       </div>
     </div>
 

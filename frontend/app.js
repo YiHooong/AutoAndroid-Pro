@@ -76,51 +76,81 @@ const state = {
 
 const TRANSLATIONS = {
   zh: {
-    titleDevices: "设备列表",
-    titleWireless: "无线连接",
-    titleStream: "视频流配置",
-    titleControls: "快捷控制台",
-    titleInteractive: "设置",
-    labelIp: "主机 IP 地址",
-    labelPort: "端口号 (Port)",
-    labelPairCode: "配对码 (Android 11+)",
-    btnPair: "开始配对",
-    btnConnect: "开始连接",
-    labelMaxRes: "最大分辨率上限",
-    labelFps: "帧率",
-    labelBitrate: "视频码率",
-    btnStartStream: "开始推流",
-    btnStopStream: "停止推流",
-    btnKeyBack: "返回键",
-    btnKeyHome: "主页键",
-    btnKeyRecent: "任务键",
-    btnKeyPower: "电源键",
-    btnSendText: "发送",
-    labelChunkSizeSelect: "视频流读取数据块大小 (Chunk Size)",
-    labelChunkSizeTip: "提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。",
-    labelLanguage: "显示语言 / Language",
-    placeholderText: "输入文本发送到手机...",
-    emptyStateText: "当前无活跃画面流",
-    titleLog: "运行日志",
-    shellBtn: "命令行",
-    shellTitle: "ADB 命令行控制台",
-    shellActiveDevice: "当前设备：",
-    shellExecute: "执行",
-    shellClear: "清空",
-    shellPlaceholder: "输入 ADB 或 Shell 命令 (如: pm list packages -3 或 adb devices)...",
-    shellWelcome: "========================================\n欢迎使用 AutoAndroid Pro 智能命令终端。\n当前设备: {serial}\n========================================\n提示: 终端支持智能命令解析。您可以直接输入 `getprop ro.product.model` (默认执行 adb shell)，也可以输入完整的 `adb shell getprop ro.product.model` 或 `adb devices` 等主机指令，系统将自动识别并执行。\n",
-    aiSettingsBtnText: "配置 AI 助手",
-    aiTitle: "AI 助手参数配置",
-    aiLabelProvider: "选择服务商:",
-    aiLabelEndpoint: "接口地址 (API Endpoint URL):",
-    aiLabelKey: "接口密钥 (API Key / Token):",
-    aiLabelModel: "默认模型名称 (Model Name):",
-    aiLabelVersion: "Anthropic 版本协议头 (Version Header):",
-    aiBtnTest: "测试连接",
-    aiBtnSave: "保存配置",
-    settingsTitle: "AutoAndroid Pro 参数设置",
-    settingsGeneralTab: "通用设置",
-    settingsAiTab: "AI 配置",
+    titleDevices: “设备列表”,
+    titleWireless: “无线连接”,
+    titleStream: “视频流配置”,
+    titleControls: “快捷控制台”,
+    titleInteractive: “设置”,
+    labelIp: “主机 IP 地址”,
+    labelPort: “端口号”,
+    labelPairCode: “配对码 (Android 11+)”,
+    btnPair: “开始配对”,
+    btnConnect: “开始连接”,
+    labelMaxRes: “最大分辨率上限”,
+    labelFps: “帧率”,
+    labelBitrate: “视频码率”,
+    btnStartStream: “开始推流”,
+    btnStopStream: “停止推流”,
+    btnKeyBack: “返回键”,
+    btnKeyHome: “主页键”,
+    btnKeyRecent: “任务键”,
+    btnKeyPower: “电源键”,
+    btnSendText: “发送”,
+    labelChunkSizeSelect: “视频流数据块大小:”,
+    labelChunkSizeTip: “提示：选择「不设置」时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。”,
+    labelLanguage: “显示语言:”,
+    placeholderText: “输入文本发送到手机...”,
+    emptyStateText: “当前无活跃画面流”,
+    titleLog: “运行日志”,
+    shellBtn: “命令行”,
+    shellTitle: “ADB 命令行控制台”,
+    shellActiveDevice: “当前设备：”,
+    shellExecute: “执行”,
+    shellClear: “清空”,
+    shellPlaceholder: “输入 ADB 或 Shell 命令 (如: pm list packages -3 或 adb devices)...”,
+    shellWelcome: “========================================\n欢迎使用 AutoAndroid Pro 智能命令终端。\n当前设备: {serial}\n========================================\n提示: 终端支持智能命令解析。您可以直接输入 `getprop ro.product.model` (默认执行 adb shell)，也可以输入完整的 `adb shell getprop ro.product.model` 或 `adb devices` 等主机指令，系统将自动识别并执行。\n”,
+    aiSettingsBtnText: “配置 AI 助手”,
+    aiTitle: “AI 助手参数配置”,
+    aiLabelProvider: “选择服务商:”,
+    aiLabelEndpoint: “接口地址:”,
+    aiLabelKey: “接口密钥:”,
+    aiLabelModel: “模型名称:”,
+    aiLabelVersion: “Anthropic 版本头:”,
+    aiBtnTest: “测试连接”,
+    aiBtnSave: “保存配置”,
+    settingsTitle: “AutoAndroid Pro 参数设置”,
+    settingsGeneralTab: “通用设置”,
+    settingsAiTab: “AI 配置”,
+    agentThinkingLabel: "思考模式",
+    aiLabelSystemPrompt: "系统提示词:",
+    aiSystemPromptPlaceholder: "留空使用默认提示词...",
+    aiSystemPromptHint: "留空则使用内置默认提示词。自定义内容会覆盖默认提示词。",
+    aiLabelStreaming: "流式传输",
+    aiLabelImageFormat: "AI 截图上传格式:",
+    ctxMenuBack: "返回",
+    ctxMenuHome: "主页",
+    ctxMenuRecents: "任务切换",
+    ctxMenuPower: "电源键",
+    ctxMenuVolUp: "音量 +",
+    ctxMenuVolDown: "音量 -",
+    optChunk0: "不设置 (推荐，延迟更低)",
+    optChunk4: "4KB (4096 字节)",
+    optChunk8: "8KB (8192 字节)",
+    optChunk16: "16KB (16384 字节)",
+    optChunk32: "32KB (32768 字节)",
+    optChunk64: "64KB (65536 字节)",
+    optRightClickBack: "触发返回键 (默认)",
+    optRightClickMenu: "弹出自定义右键菜单",
+    optBorderShow: "显示边线 (默认)",
+    optBorderHide: "隐藏边线",
+    optFormatAuto: "自动识别 (根据服务商选择)",
+    optFormatImageUrl: "image_url (OpenAI 格式)",
+    optFormatBase64: "base64 / image (Anthropic 格式)",
+    aiImageFormatHint: "提示：选择「自动识别」时，系统根据 AI 服务商自动选择图片格式。如果使用的兼容 API 格式不匹配，可手动指定。",
+    labelRightClickBehavior: "鼠标右键行为:",
+    labelRightClickTip: "提示：选择「触发返回键」时，右键直接在投屏区域模拟物理返回。选择「弹出自定义右键菜单」时，右键点击将展开功能操作列表。",
+    labelHideBorder: "隐藏投屏区域边线:",
+    labelHideBorderTip: "提示：选择「隐藏边线」时，系统将移除投屏画布四周的高亮边框线，使画面在视觉上更加纯净。",
   },
   en: {
     titleDevices: "Devices",
@@ -143,9 +173,9 @@ const TRANSLATIONS = {
     btnKeyRecent: "Recent",
     btnKeyPower: "Power",
     btnSendText: "Send",
-    labelChunkSizeSelect: "Read Chunk Size Selection",
-    labelChunkSizeTip: "Tip: Selecting 'No Limit' disables packet framing limits, resulting in raw socket direct reading (recommended for lowest latency). You can select 4KB-64KB chunk parameters if needed.",
-    labelLanguage: "Language / 语言切换",
+    labelChunkSizeSelect: "Stream Chunk Size:",
+    labelChunkSizeTip: "Tip: 'No Limit' disables packet framing for raw socket reading (lowest latency). Select 4KB-64KB if needed.",
+    labelLanguage: "Language:",
     placeholderText: "Type text...",
     emptyStateText: "No active stream",
     titleLog: "Activity Log",
@@ -158,16 +188,46 @@ const TRANSLATIONS = {
     shellWelcome: "========================================\nWelcome to AutoAndroid Pro Command Terminal.\nActive Device: {serial}\n========================================\nTip: The terminal supports intelligent parsing. You can enter `getprop ro.product.model` (runs adb shell ro.product.model), or full commands like `adb shell getprop ro.product.model` or `adb devices`, and the system will automatically execute them.\n",
     aiSettingsBtnText: "Configure AI",
     aiTitle: "AI Configuration",
-    aiLabelProvider: "Select Provider:",
-    aiLabelEndpoint: "API Base Endpoint URL:",
+    aiLabelProvider: "Provider:",
+    aiLabelEndpoint: "API Endpoint:",
     aiLabelKey: "API Key:",
     aiLabelModel: "Model Name:",
-    aiLabelVersion: "Anthropic Version Header:",
+    aiLabelVersion: "Anthropic Version:",
     aiBtnTest: "Test Connection",
     aiBtnSave: "Save Settings",
     settingsTitle: "AutoAndroid Pro Settings",
     settingsGeneralTab: "General Settings",
     settingsAiTab: "AI Configuration",
+    agentThinkingLabel: "Thinking Mode",
+    aiLabelSystemPrompt: "System Prompt:",
+    aiSystemPromptPlaceholder: "Leave empty to use default prompt...",
+    aiSystemPromptHint: "Leave empty to use the built-in default prompt. Custom content overrides the default.",
+    aiLabelStreaming: "Streaming",
+    aiLabelImageFormat: "Image Upload Format:",
+    ctxMenuBack: "Back",
+    ctxMenuHome: "Home",
+    ctxMenuRecents: "Recents",
+    ctxMenuPower: "Power",
+    ctxMenuVolUp: "Volume Up",
+    ctxMenuVolDown: "Volume Down",
+    optChunk0: "No Limit (Recommended)",
+    optChunk4: "4KB (4096 bytes)",
+    optChunk8: "8KB (8192 bytes)",
+    optChunk16: "16KB (16384 bytes)",
+    optChunk32: "32KB (32768 bytes)",
+    optChunk64: "64KB (65536 bytes)",
+    optRightClickBack: "Back Key (Default)",
+    optRightClickMenu: "Context Menu",
+    optBorderShow: "Show (Default)",
+    optBorderHide: "Hide",
+    optFormatAuto: "Auto (Based on provider)",
+    optFormatImageUrl: "image_url (OpenAI format)",
+    optFormatBase64: "base64 / image (Anthropic format)",
+    aiImageFormatHint: "Tip: 'Auto' selects image format based on AI provider. Manually specify if the compatible API format doesn't match.",
+    labelRightClickBehavior: "Right-Click Behavior:",
+    labelRightClickTip: "Tip: 'Back Key' simulates a physical back button on right-click. 'Context Menu' opens a custom action menu.",
+    labelHideBorder: "Hide Stream Border:",
+    labelHideBorderTip: "Tip: When set to 'Hide', the highlight border around the stream canvas is removed for a cleaner look.",
   }
 };
 
@@ -183,6 +243,12 @@ function applyLanguage(lang) {
     const key = el.getAttribute("data-i18n");
     if (dict[key]) {
       el.textContent = dict[key];
+    }
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (dict[key]) {
+      el.placeholder = dict[key];
     }
   });
   $("textInput").placeholder = dict.placeholderText;
@@ -1439,6 +1505,7 @@ function loadAllSettings() {
   aiModelName.value = localStorage.getItem("ai_model_name") || "";
   aiVersion.value = localStorage.getItem("ai_version") || "2023-06-01";
   $("aiSystemPrompt").value = localStorage.getItem("ai_system_prompt") || "";
+  $("aiStreamingToggle").checked = localStorage.getItem("ai_streaming") === "true";
 
   settingsStatusArea.style.display = "none";
 }
@@ -1617,6 +1684,7 @@ $("saveSettingsBtn").addEventListener("click", () => {
   localStorage.setItem("ai_model_name", aiModelName.value.trim());
   localStorage.setItem("ai_version", aiVersion.value.trim());
   localStorage.setItem("ai_system_prompt", $("aiSystemPrompt").value.trim());
+  localStorage.setItem("ai_streaming", $("aiStreamingToggle").checked);
 
   settingsStatusArea.style.display = "block";
   settingsStatusArea.style.background = "rgba(0, 255, 102, 0.1)";
@@ -2111,7 +2179,7 @@ You can interact with the phone in these ways:
 2. swipe — Drag finger from one point to another. Use for sliding, dragging, horizontal page swiping.
 3. scroll — Scroll content at a position. Use for vertical scrolling through lists, pages.
 4. type — Input text into a focused text field. Use after tapping a text input to focus it.
-5. key — Press hardware/software keys: back, home, power, enter, delete, tab, space.
+5. key — Press hardware/software keys: back, home, recent, power, enter, delete, tab, space.
 6. longpress — Press and hold a point. Use only for context menus or selecting text.
 7. wait — Do nothing, wait for screen to update (loading, animation, transition).
 
@@ -2127,9 +2195,10 @@ Simple actions (execute immediately):
   tap:     {"thought":"点击设置图标","action":"tap","x":360,"y":640}
   swipe:   {"thought":"向左滑动页面","action":"swipe","x1":600,"y1":640,"x2":120,"y2":640,"duration_ms":300}
   scroll:  {"thought":"向下滚动列表","action":"scroll","x":360,"y":640,"direction":"down"}
-  type:    {"thought":"替换当前输入框内容","action":"type","text":"雷军"}
+  type:    {"thought":"替换当前输入框内容","action":"type","text":"Hello World"}
   longpress: {"thought":"长按文本区域","action":"longpress","x":360,"y":640,"duration_ms":800}
   key:     {"thought":"按返回键","action":"key","key":"back"}
+  key:     {"thought":"打开最近任务","action":"key","key":"recent"}
   wait:    {"thought":"等待页面加载","action":"wait","reason":"loading"}
 
 Terminal actions:
@@ -2155,7 +2224,11 @@ When to use simple actions directly:
 - Use "back" key to return to previous screen
 - Use "wait" when an action triggers loading or transition
 - If stuck after 2 attempts, use "fail"
-- When the task goal is clearly achieved, use "done"`;
+- When the task goal is clearly achieved, use "done"
+- You have up to 30 steps per batch. If you need more steps, use "need_more_steps" to request an extension from the user
+- For complex multi-step tasks, proceed step by step. Don't try to finish prematurely
+
+need_more_steps: {"thought":"任务还没完成，需要更多步骤","action":"need_more_steps","reason":"正在逐步完成复杂任务"}`;
 }
 
 function captureFrame() {
@@ -2339,6 +2412,7 @@ async function callAgentAI(systemPrompt, messages) {
   const api_key = localStorage.getItem("ai_key") || "";
   const model_name = localStorage.getItem("ai_model_name") || "";
   const anthropic_version = localStorage.getItem("ai_version") || "2023-06-01";
+  const streaming = localStorage.getItem("ai_streaming") === "true";
 
   if (!api_key) throw new Error("API Key not configured. Please set it in Settings.");
 
@@ -2351,8 +2425,9 @@ async function callAgentAI(systemPrompt, messages) {
     anthropic_version,
     system_prompt: systemPrompt,
     messages,
+    stream: streaming,
   });
-  console.log(`[Agent AI] payload size: ${(payload.length / 1024).toFixed(1)} KB, messages: ${messages.length}`);
+  console.log(`[Agent AI] payload size: ${(payload.length / 1024).toFixed(1)} KB, messages: ${messages.length}, stream: ${streaming}`);
   // Log each message's approximate image size
   messages.forEach((m, i) => {
     const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
@@ -2362,6 +2437,10 @@ async function callAgentAI(systemPrompt, messages) {
     }
   });
 
+  if (streaming) {
+    return callAgentAIStream(payload);
+  }
+
   const res = await api("/api/ai/chat", {
     method: "POST",
     body: payload,
@@ -2369,6 +2448,82 @@ async function callAgentAI(systemPrompt, messages) {
 
   if (!res.ok) throw new Error(res.error || "AI request failed");
   return res.text;
+}
+
+async function callAgentAIStream(payload) {
+  const response = await fetch("/api/ai/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || response.statusText);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop(); // keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = line.slice(6);
+        if (data === "[DONE]") continue;
+        try {
+          const chunk = JSON.parse(data);
+          // OpenAI format: choices[0].delta.content
+          // DeepSeek-R1: choices[0].delta.reasoning_content
+          // Anthropic format: delta.text (type: content_block_delta)
+          const choice = chunk.choices?.[0]?.delta;
+          let delta = choice?.content || "";
+          if (!delta && choice?.reasoning_content) {
+            delta = choice.reasoning_content;
+          }
+          if (!delta && chunk.type === "content_block_delta") {
+            delta = chunk.delta?.text || "";
+          }
+          if (delta) {
+            fullText += delta;
+            // Update thought panel in real-time
+            const content = $("agentThoughtContent");
+            if (content) {
+              let streamEl = content.querySelector(".streaming-response");
+              if (!streamEl) {
+                streamEl = document.createElement("div");
+                streamEl.className = "streaming-response";
+                streamEl.style.cssText = "padding:6px 0;border-bottom:1px solid rgba(90,200,250,0.1);";
+                streamEl.innerHTML = `<div style="color:#5ac8fa;font-weight:600;margin-bottom:3px;">Streaming...</div><div class="stream-text" style="color:#9fcfe8;word-break:break-word;white-space:pre-wrap;"></div>`;
+                content.appendChild(streamEl);
+              }
+              streamEl.querySelector(".stream-text").textContent = fullText;
+              content.scrollTop = content.scrollHeight;
+            }
+          }
+        } catch (e) {
+          // ignore parse errors for non-JSON lines
+        }
+      }
+    }
+  }
+
+  console.log(`[Agent AI] stream complete: ${fullText.length} chars`);
+  // Remove streaming indicator from thought panel
+  const streamEl = $("agentThoughtContent")?.querySelector(".streaming-response");
+  if (streamEl) {
+    const label = streamEl.querySelector("div:first-child");
+    if (label) label.textContent = fullText.length > 0 ? "Streamed" : "Empty response";
+  }
+  return fullText;
 }
 
 function parseAgentAction(text) {
@@ -2506,6 +2661,7 @@ function addAgentLog(step, thought, action, screenshotBase64) {
   else if (action.action === "longpress") actionDesc = `longpress (${action.x}, ${action.y})`;
   else if (action.action === "wait") actionDesc = `wait: ${action.reason || ""}`;
   else if (action.action === "done") actionDesc = `done: ${action.summary || ""}`;
+  else if (action.action === "need_more_steps") actionDesc = `need_more_steps: ${action.reason || ""}`;
   else if (action.action === "fail") actionDesc = `fail: ${action.reason || ""}`;
   else if (action.action === "plan") actionDesc = `plan (${action.desc || "steps"})`;
 
@@ -2746,6 +2902,8 @@ async function executeAgentAction(action) {
         back: SCRCPY_CONTROL.KEYCODE_BACK,
         home: SCRCPY_CONTROL.KEYCODE_HOME,
         power: SCRCPY_CONTROL.KEYCODE_POWER,
+        recent: SCRCPY_CONTROL.KEYCODE_APP_SWITCH,
+        app_switch: SCRCPY_CONTROL.KEYCODE_APP_SWITCH,
         enter: 66,
         delete: 67,
         del: 67,
@@ -2795,6 +2953,8 @@ async function executeAgentAction(action) {
       break;
     case "done":
     case "fail":
+      break;
+    case "need_more_steps":
       break;
   }
 }
@@ -3033,7 +3193,8 @@ async function agentLoop(task) {
   clearAgentThoughts();
   setAgentThoughtPanelVisible(isAgentThinkingEnabled());
 
-  const MAX_STEPS = 20;
+  const STEP_BATCH = 30;
+  let maxSteps = STEP_BATCH;
   const history = [];
   let step = 0;
 
@@ -3047,9 +3208,25 @@ async function agentLoop(task) {
   }
 
   try {
-    while (agentState.running && step < MAX_STEPS) {
+    while (agentState.running) {
+      // Check if we need more steps
+      if (step >= maxSteps) {
+        log(`Agent: reached ${maxSteps} steps, asking user for more...`);
+        if (statusEl) statusEl.textContent = `等待用户确认...`;
+        const more = await new Promise(resolve => {
+          setTimeout(() => resolve(confirm(`Agent 已执行 ${maxSteps} 步，任务尚未完成。\n\n是否继续执行更多步骤？`)), 50);
+        });
+        if (more && agentState.running) {
+          maxSteps += STEP_BATCH;
+          log(`Agent: user approved, extending to ${maxSteps} steps`);
+        } else {
+          log(`Agent: user declined or stopped at ${maxSteps} steps`);
+          break;
+        }
+      }
+
       step++;
-      if (statusEl) statusEl.textContent = `Step ${step}/${MAX_STEPS}...`;
+      if (statusEl) statusEl.textContent = `Step ${step}/${maxSteps}...`;
 
       // 1. Capture frame with coordinate grid for AI
       const capture = captureFrameWithGrid();
@@ -3080,13 +3257,23 @@ async function agentLoop(task) {
         addAgentThought(step, "模型原始输出", aiText.slice(0, 1200));
       }
 
-      // Retry once if empty response
+      // Retry if empty response — try non-streaming fallback
       if (!aiText || !aiText.trim()) {
-        console.warn(`[Agent] step ${step} got empty response, retrying...`);
+        const wasStream = localStorage.getItem("ai_streaming") === "true";
+        console.warn(`[Agent] step ${step} got empty response (stream=${wasStream}), retrying...`);
         await new Promise(r => setTimeout(r, 2000));
         try {
-          aiText = await callAgentAI(systemPrompt, messages);
+          if (wasStream) {
+            // Fallback: temporarily disable streaming for retry
+            localStorage.setItem("ai_streaming", "false");
+            aiText = await callAgentAI(systemPrompt, messages);
+            localStorage.setItem("ai_streaming", "true");
+            console.log(`[Agent] step ${step} non-streaming fallback: ${aiText.length} chars`);
+          } else {
+            aiText = await callAgentAI(systemPrompt, messages);
+          }
         } catch (err) {
+          if (wasStream) localStorage.setItem("ai_streaming", "true");
           log(`Agent AI retry error: ${err.message}`);
           break;
         }
@@ -3132,6 +3319,17 @@ async function agentLoop(task) {
         log(`Agent: task failed — ${action.reason || ""}`);
         break;
       }
+      if (action.action === "need_more_steps") {
+        log(`Agent: requesting more steps — ${action.reason || ""}`);
+        const more = confirm(`Agent 请求更多步骤：${action.reason || "任务尚未完成"}\n\n是否批准？`);
+        if (more && agentState.running) {
+          maxSteps += STEP_BATCH;
+          log(`Agent: user approved, extending to ${maxSteps} steps`);
+        } else {
+          log(`Agent: user declined, stopping`);
+          break;
+        }
+      }
 
       // 5b. Plan actions are intentionally not executed. Coordinates for
       // future screens are guesses, so continue with a fresh observation.
@@ -3164,9 +3362,7 @@ async function agentLoop(task) {
       await new Promise((r) => setTimeout(r, 1000));
     }
 
-    if (step >= MAX_STEPS) {
-      log(`Agent: reached max steps (${MAX_STEPS})`);
-    }
+    // Step limit handled inside the loop
   } finally {
     agentState.running = false;
     agentState.abortController = null;

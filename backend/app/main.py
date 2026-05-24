@@ -397,6 +397,7 @@ class AiChatPayload(BaseModel):
     anthropic_version: str | None = None
     system_prompt: str = ""
     messages: list  # [{role, content}] — content can be string or array of blocks
+    stream: bool = False
 
 
 @app.post("/api/ai/chat")
@@ -451,6 +452,54 @@ def ai_chat(payload: AiChatPayload):
         }
 
     try:
+        # Streaming mode
+        if payload.stream:
+            body["stream"] = True
+            data = json.dumps(body).encode("utf-8")
+            print(f"[AI Chat] STREAM mode, provider={provider} payload_size={len(data)} bytes")
+            req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
+
+            def stream_generator():
+                total_bytes = 0
+                total_lines = 0
+                try:
+                    with urllib.request.urlopen(req, timeout=120) as response:
+                        buf = b""
+                        while True:
+                            chunk = response.read(4096)
+                            if not chunk:
+                                break
+                            buf += chunk
+                            total_bytes += len(chunk)
+                            while b"\n" in buf:
+                                raw_line, buf = buf.split(b"\n", 1)
+                                line = raw_line.decode("utf-8", errors="replace").strip()
+                                if not line:
+                                    continue
+                                total_lines += 1
+                                if line.startswith("data: "):
+                                    yield f"{line}\n\n"
+                                elif line.startswith(":"):
+                                    pass  # skip SSE comments
+                                else:
+                                    yield f"data: {line}\n\n"
+                    # Flush remaining buffer
+                    if buf:
+                        line = buf.decode("utf-8", errors="replace").strip()
+                        if line:
+                            if line.startswith("data: "):
+                                yield f"{line}\n\n"
+                            else:
+                                yield f"data: {line}\n\n"
+                    yield "data: [DONE]\n\n"
+                    print(f"[AI Chat] stream done: {total_bytes} bytes, {total_lines} lines")
+                except Exception as e:
+                    print(f"[AI Chat] stream error: {e}")
+                    yield f"data: [ERROR] {e}\n\n"
+
+            return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+        # Non-streaming mode
         data = json.dumps(body).encode("utf-8")
         print(f"[AI Chat] provider={provider} payload_size={len(data)} bytes")
         req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
