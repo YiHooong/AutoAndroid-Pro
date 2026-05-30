@@ -59,9 +59,9 @@ pip install -r requirements.txt
 python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## 多架构镜像
+## 容器镜像
 
-CI 自动构建 `linux/amd64` 和 `linux/arm64` 双架构镜像，推送到 GitHub Container Registry：
+CI 自动构建 `linux/amd64` 镜像，推送到 GitHub Container Registry。当前 Dockerfile 使用官方 scrcpy Linux 预编译包，scrcpy v4.0 未提供对应的官方 `linux/arm64` 预编译包，因此暂不构建 arm64 镜像。
 
 ```bash
 docker pull ghcr.io/yihoong/autoandroid-pro:main

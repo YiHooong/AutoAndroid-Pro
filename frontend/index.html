@@ -343,7 +343,7 @@
                   <option data-i18n="optChunk32" value="32768">32KB (32768 字节)</option>
                   <option data-i18n="optChunk64" value="65536">64KB (65536 字节)</option>
                 </select>
-                <span data-i18n="labelChunkSizeTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“不设置”时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。</span>
+                <span data-i18n="labelChunkSizeTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择「不设置」时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。</span>
               </div>
               <!-- Right-Click Action Option -->
               <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
@@ -352,7 +352,7 @@
                   <option data-i18n="optRightClickBack" value="back">触发返回键 (默认)</option>
                   <option data-i18n="optRightClickMenu" value="menu">弹出自定义右键菜单</option>
                 </select>
-                <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择“触发返回键”时，右键直接在投屏区域模拟物理返回。选择“弹出自定义右键菜单”时，右键点击将展开功能操作列表。</span>
+                <span data-i18n="labelRightClickTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择「触发返回键」时，右键直接在投屏区域模拟物理返回。选择「弹出自定义右键菜单」时，右键点击将展开功能操作列表。</span>
               </div>
 
               
@@ -363,17 +363,17 @@
                   <option data-i18n="optBorderShow" value="false">显示边线 (默认)</option>
                   <option data-i18n="optBorderHide" value="true">隐藏边线</option>
                 </select>
-                <span data-i18n=”labelHideBorderTip” style=”font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;”>提示：选择”隐藏边线”时，系统将移除投屏画布四周的高亮黄色边框线，使画面在视觉上更加纯净。</span>
+                <span data-i18n="labelHideBorderTip" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择「隐藏边线」时，系统将移除投屏画布四周的高亮黄色边框线，使画面在视觉上更加纯净。</span>
               </div>
               <!-- AI Image Format Option -->
-              <div style=”display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;”>
-                <span data-i18n=”aiLabelImageFormat” style=”font-size: 12.5px; color: #e6ebf1; font-weight: 500;”>AI 截图上传格式:</span>
-                <select id=”imageFormatSelect” style=”font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;” onfocus=”this.style.borderColor='rgba(0,255,102,0.4)'” onblur=”this.style.borderColor='rgba(255,255,255,0.08)'”>
-                  <option data-i18n=”optFormatAuto” value=”auto”>自动识别 (根据服务商选择)</option>
-                  <option data-i18n=”optFormatImageUrl” value=”image_url”>image_url (OpenAI 格式)</option>
-                  <option data-i18n=”optFormatBase64” value=”base64”>base64 / image (Anthropic 格式)</option>
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 8px;">
+                <span data-i18n="aiLabelImageFormat" style="font-size: 12.5px; color: #e6ebf1; font-weight: 500;">AI 截图上传格式:</span>
+                <select id="imageFormatSelect" style="font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; color: #fff; outline: none; transition: border-color 0.2s; cursor: pointer; width: 100%;" onfocus="this.style.borderColor='rgba(0,255,102,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <option data-i18n="optFormatAuto" value="auto">自动识别 (根据服务商选择)</option>
+                  <option data-i18n="optFormatImageUrl" value="image_url">image_url (OpenAI 格式)</option>
+                  <option data-i18n="optFormatBase64" value="base64">base64 / image (Anthropic 格式)</option>
                 </select>
-                <span data-i18n=”aiImageFormatHint” style=”font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;”>提示：选择”自动识别”时，系统根据 AI 服务商自动选择图片格式。如果使用的兼容 API 格式不匹配，可手动指定。</span>
+                <span data-i18n="aiImageFormatHint" style="font-size: 11px; color: #8a949d; line-height: 1.4; margin-top: 2px;">提示：选择「自动识别」时，系统根据 AI 服务商自动选择图片格式。如果使用的兼容 API 格式不匹配，可手动指定。</span>
               </div>
             </div>
           </div>

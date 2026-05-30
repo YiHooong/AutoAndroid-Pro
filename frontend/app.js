@@ -76,51 +76,51 @@ const state = {
 
 const TRANSLATIONS = {
   zh: {
-    titleDevices: “设备列表”,
-    titleWireless: “无线连接”,
-    titleStream: “视频流配置”,
-    titleControls: “快捷控制台”,
-    titleInteractive: “设置”,
-    labelIp: “主机 IP 地址”,
-    labelPort: “端口号”,
-    labelPairCode: “配对码 (Android 11+)”,
-    btnPair: “开始配对”,
-    btnConnect: “开始连接”,
-    labelMaxRes: “最大分辨率上限”,
-    labelFps: “帧率”,
-    labelBitrate: “视频码率”,
-    btnStartStream: “开始推流”,
-    btnStopStream: “停止推流”,
-    btnKeyBack: “返回键”,
-    btnKeyHome: “主页键”,
-    btnKeyRecent: “任务键”,
-    btnKeyPower: “电源键”,
-    btnSendText: “发送”,
-    labelChunkSizeSelect: “视频流数据块大小:”,
-    labelChunkSizeTip: “提示：选择「不设置」时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。”,
-    labelLanguage: “显示语言:”,
-    placeholderText: “输入文本发送到手机...”,
-    emptyStateText: “当前无活跃画面流”,
-    titleLog: “运行日志”,
-    shellBtn: “命令行”,
-    shellTitle: “ADB 命令行控制台”,
-    shellActiveDevice: “当前设备：”,
-    shellExecute: “执行”,
-    shellClear: “清空”,
-    shellPlaceholder: “输入 ADB 或 Shell 命令 (如: pm list packages -3 或 adb devices)...”,
-    shellWelcome: “========================================\n欢迎使用 AutoAndroid Pro 智能命令终端。\n当前设备: {serial}\n========================================\n提示: 终端支持智能命令解析。您可以直接输入 `getprop ro.product.model` (默认执行 adb shell)，也可以输入完整的 `adb shell getprop ro.product.model` 或 `adb devices` 等主机指令，系统将自动识别并执行。\n”,
-    aiSettingsBtnText: “配置 AI 助手”,
-    aiTitle: “AI 助手参数配置”,
-    aiLabelProvider: “选择服务商:”,
-    aiLabelEndpoint: “接口地址:”,
-    aiLabelKey: “接口密钥:”,
-    aiLabelModel: “模型名称:”,
-    aiLabelVersion: “Anthropic 版本头:”,
-    aiBtnTest: “测试连接”,
-    aiBtnSave: “保存配置”,
-    settingsTitle: “AutoAndroid Pro 参数设置”,
-    settingsGeneralTab: “通用设置”,
-    settingsAiTab: “AI 配置”,
+    titleDevices: "设备列表",
+    titleWireless: "无线连接",
+    titleStream: "视频流配置",
+    titleControls: "快捷控制台",
+    titleInteractive: "设置",
+    labelIp: "主机 IP 地址",
+    labelPort: "端口号",
+    labelPairCode: "配对码 (Android 11+)",
+    btnPair: "开始配对",
+    btnConnect: "开始连接",
+    labelMaxRes: "最大分辨率上限",
+    labelFps: "帧率",
+    labelBitrate: "视频码率",
+    btnStartStream: "开始推流",
+    btnStopStream: "停止推流",
+    btnKeyBack: "返回键",
+    btnKeyHome: "主页键",
+    btnKeyRecent: "任务键",
+    btnKeyPower: "电源键",
+    btnSendText: "发送",
+    labelChunkSizeSelect: "视频流数据块大小:",
+    labelChunkSizeTip: "提示：选择「不设置」时，系统将关闭固定包块限制并开启 socket 直读，适合低延迟投屏。针对高端或弱网设备可按需调大分包大小。",
+    labelLanguage: "显示语言:",
+    placeholderText: "输入文本发送到手机...",
+    emptyStateText: "当前无活跃画面流",
+    titleLog: "运行日志",
+    shellBtn: "命令行",
+    shellTitle: "ADB 命令行控制台",
+    shellActiveDevice: "当前设备：",
+    shellExecute: "执行",
+    shellClear: "清空",
+    shellPlaceholder: "输入 ADB 或 Shell 命令 (如: pm list packages -3 或 adb devices)...",
+    shellWelcome: "========================================\n欢迎使用 AutoAndroid Pro 智能命令终端。\n当前设备: {serial}\n========================================\n提示: 终端支持智能命令解析。您可以直接输入 `getprop ro.product.model` (默认执行 adb shell)，也可以输入完整的 `adb shell getprop ro.product.model` 或 `adb devices` 等主机指令，系统将自动识别并执行。\n",
+    aiSettingsBtnText: "配置 AI 助手",
+    aiTitle: "AI 助手参数配置",
+    aiLabelProvider: "选择服务商:",
+    aiLabelEndpoint: "接口地址:",
+    aiLabelKey: "接口密钥:",
+    aiLabelModel: "模型名称:",
+    aiLabelVersion: "Anthropic 版本头:",
+    aiBtnTest: "测试连接",
+    aiBtnSave: "保存配置",
+    settingsTitle: "AutoAndroid Pro 参数设置",
+    settingsGeneralTab: "通用设置",
+    settingsAiTab: "AI 配置",
     agentThinkingLabel: "思考模式",
     aiLabelSystemPrompt: "系统提示词:",
     aiSystemPromptPlaceholder: "留空使用默认提示词...",
@@ -286,9 +286,63 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+function getDevice(serial) {
+  return state.devices.find((device) => device.serial === serial) || null;
+}
+
+function deviceLabel(device) {
+  if (!device) return "";
+  return `${device.serial}${device.model ? ` / ${device.model}` : ""}`;
+}
+
+async function tryAuthorizeDevice(serial) {
+  const device = getDevice(serial);
+  log(`ADB authorization retry: ${deviceLabel(device) || serial}`);
+  setStatus("Authorizing", "Trying to reconnect ADB device");
+  const result = await api(`/api/devices/${encodeURIComponent(serial)}/authorize`, {
+    method: "POST",
+  });
+  if (result.message) {
+    log(`ADB authorization retry result: ${result.message}`);
+  }
+  await loadDevices(serial);
+  const refreshed = getDevice(serial);
+  if (refreshed?.state === "device") {
+    log(`ADB authorized: ${deviceLabel(refreshed)}`);
+    return refreshed;
+  }
+  const stateText = refreshed?.state || result.device?.state || "not found";
+  throw new Error(`Device is still ${stateText}. If no authorization dialog appears, use Android wireless debugging Pair first, then Connect.`);
+}
+
+async function requireAuthorizedDevice(serial, actionName = "continue") {
+  const device = getDevice(serial);
+  if (!device) {
+    throw new Error("Selected device is no longer available");
+  }
+  if (device.state === "device") {
+    return device;
+  }
+  if (device.state === "unauthorized") {
+    log(`Device unauthorized before ${actionName}; trying to request authorization...`);
+    return tryAuthorizeDevice(serial);
+  }
+  throw new Error(`Device is ${device.state}, cannot ${actionName}`);
+}
+
 async function updateDeviceResolution() {
   const serial = $("deviceSelect").value;
   if (!serial) return;
+  const device = getDevice(serial);
+  if (device && device.state !== "device") {
+    $("maxSize").value = "1280";
+    $("maxFps").value = "";
+    state.nativeWidth = 0;
+    state.nativeHeight = 0;
+    setStatus("Device not authorized", `${device.serial} is ${device.state}`);
+    log(`Skipped device resolution: ${device.serial} is ${device.state}`);
+    return;
+  }
   try {
     const res = await api(`/api/devices/${encodeURIComponent(serial)}/wm-size`);
     let match = res.raw.match(/Override size:\s*(\d+)x(\d+)/i);
@@ -326,7 +380,7 @@ async function updateDeviceResolution() {
   }
 }
 
-async function loadDevices() {
+async function loadDevices(preferredSerial = state.selected) {
   const data = await api("/api/devices");
   state.devices = data.devices || [];
   const select = $("deviceSelect");
@@ -338,8 +392,15 @@ async function loadDevices() {
     select.appendChild(option);
   }
   if (state.devices.length) {
-    state.selected = select.value || state.devices[0].serial;
+    const authorized = state.devices.find((device) => device.state === "device");
+    const preferred = state.devices.find((device) => device.serial === preferredSerial);
+    state.selected = (preferred && preferred.serial) || (authorized && authorized.serial) || state.devices[0].serial;
+    select.value = state.selected;
     await updateDeviceResolution();
+  } else {
+    state.selected = "";
+    $("maxSize").value = "1280";
+    $("maxFps").value = "";
   }
 }
 
@@ -517,7 +578,7 @@ function resetStream(isUnexpected = false, reason = "") {
   btn.classList.remove("streaming-active");
 }
 
-function connectStream() {
+async function connectStream() {
   const btn = $("connectBtn");
   if (state.ws) {
     resetStream();
@@ -532,6 +593,15 @@ function connectStream() {
 
   btn.disabled = true;
   btn.innerHTML = `<svg width="16" height="16" class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 0 1 8-8" stroke-linecap="round"></path></svg> Connecting...`;
+  try {
+    await requireAuthorizedDevice(serial, "start stream");
+  } catch (err) {
+    log(`Stream blocked: ${err.message}`);
+    setStatus("Authorization required", err.message);
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.268 5.268c3.272-3.272 8.573-3.272 11.845 0m-9.016 2.828c1.71-1.71 4.48-1.71 6.19 0m-3.896 2.115a2.5 2.5 0 100 5m0-5a2.5 2.5 0 110 5"></path></svg> Start Stream`;
+    return;
+  }
 
   const chunkSize = Number(chunkSizeSelect.value) || 0;
   const audioForwardEnabled = state.audioForwardEnabled;
@@ -735,11 +805,15 @@ function connectStream() {
 
 // ═══════════════════════════════════════════════════════
 // Real-time touch control via scrcpy control protocol
-// Inspired by ws-scrcpy's FeaturedInteractionHandler
+// Inspired by ws-scrcpy and Tango's @yume-chan/scrcpy serializers.
 //
-// scrcpy v1.25 wire format (from control_msg.c):
-//   INJECT_TOUCH_EVENT (type=2): 28 bytes
-//     type(1) + action(1) + pointerId(8) + x(4) + y(4) + w(2) + h(2) + pressure(2) + buttons(4)
+// scrcpy v2+ wire format:
+//   INJECT_TOUCH_EVENT (type=2): 32 bytes
+//     type(1) + action(1) + pointerId(8) + x(4) + y(4) + w(2) + h(2)
+//     + pressure u16-float(2) + actionButton(4) + buttons(4)
+//   INJECT_SCROLL_EVENT (type=3): 21 bytes
+//     type(1) + x(4) + y(4) + w(2) + h(2) + hscroll i16-float(2)
+//     + vscroll i16-float(2) + buttons(4)
 //   BACK_OR_SCREEN_ON (type=4): 2 bytes
 //     type(1) + action(1)
 //   INJECT_KEYCODE (type=0): 14 bytes
@@ -754,10 +828,11 @@ const SCRCPY_CONTROL = {
   ACTION_DOWN: 0,
   ACTION_UP: 1,
   ACTION_MOVE: 2,
-  BUTTON_PRIMARY: 1,       // left click
-  BUTTON_SECONDARY: 2,     // right click
-  BUTTON_TERTIARY: 4,      // middle click
-  MAX_PRESSURE: 0xFFFF,
+  BUTTON_PRIMARY: 1,
+  BUTTON_SECONDARY: 2,
+  BUTTON_TERTIARY: 4,
+  MAX_PRESSURE: 1,
+  POINTER_ID_MOUSE: -1n,
   KEYCODE_BACK: 4,
   KEYCODE_HOME: 3,
   KEYCODE_APP_SWITCH: 187,
@@ -772,133 +847,114 @@ function activePoint(event) {
   const width = state.videoWidth;
   if (!width) return { x: 0, y: 0 };
 
-  let targetWidth = state.nativeWidth || state.videoWidth;
-  let targetHeight = state.nativeHeight || state.videoHeight;
-
-  // Handle dynamic screen rotation coordinate swapping
-  const streamIsLandscape = state.videoWidth > state.videoHeight;
-  const nativeIsLandscape = targetWidth > targetHeight;
-  if (streamIsLandscape !== nativeIsLandscape) {
-    const temp = targetWidth;
-    targetWidth = targetHeight;
-    targetHeight = temp;
-  }
-
-  const scaleX = targetWidth / rect.width;
-  const scaleY = targetHeight / rect.height;
+  const scaleX = state.videoWidth / rect.width;
+  const scaleY = state.videoHeight / rect.height;
   return {
-    x: Math.max(0, Math.round((event.clientX - rect.left) * scaleX)),
-    y: Math.max(0, Math.round((event.clientY - rect.top) * scaleY)),
+    x: clampNumber((event.clientX - rect.left) * scaleX, 0, state.videoWidth - 1, state.videoWidth / 2),
+    y: clampNumber((event.clientY - rect.top) * scaleY, 0, state.videoHeight - 1, state.videoHeight / 2),
   };
 }
 
+function setUint64(view, offset, value) {
+  let bigint = BigInt(value);
+  if (bigint < 0) {
+    bigint = (1n << 64n) + bigint;
+  }
+  view.setUint32(offset, Number((bigint >> 32n) & 0xffffffffn));
+  view.setUint32(offset + 4, Number(bigint & 0xffffffffn));
+}
+
+function encodeUnsignedFloat16(value) {
+  const clamped = Math.max(0, Math.min(1, Number(value) || 0));
+  return clamped === 1 ? 0xffff : Math.round(clamped * 0x10000);
+}
+
+function encodeSignedFloat16(value) {
+  const clamped = Math.max(-1, Math.min(1, Number(value) || 0));
+  if (clamped === 1) return 0x7fff;
+  if (clamped === -1) return -0x8000;
+  return Math.round(clamped * 0x8000);
+}
+
 function buildTouchMessage(action, pointerId, x, y, screenW, screenH, pressure, buttons, action_button = 0) {
-  // scrcpy v4 inject_touch_event: 32 bytes total
   const buf = new ArrayBuffer(32);
   const view = new DataView(buf);
   view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_TOUCH_EVENT);
   view.setUint8(1, action);
-  // pointerId is uint64 (8 bytes)
-  view.setUint32(2, 0);           // upper 4 bytes
-  view.setUint32(6, pointerId);   // lower 4 bytes
+  setUint64(view, 2, pointerId);
   view.setUint32(10, x);
   view.setUint32(14, y);
   view.setUint16(18, screenW);
   view.setUint16(20, screenH);
-  view.setUint16(22, pressure);
-  view.setUint32(24, action_button);          // action_button
+  view.setUint16(22, encodeUnsignedFloat16(pressure));
+  view.setUint32(24, action_button);
   view.setUint32(28, buttons);
   return buf;
 }
 
 function buildScrollMessage(x, y, screenW, screenH, hscrollVal, vscrollVal, buttons = 0) {
-  // scrcpy v4 inject_scroll_event: 21 bytes total
   const buf = new ArrayBuffer(21);
   const view = new DataView(buf);
-
   view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_SCROLL_EVENT);
-
-  // position: 12 bytes
   view.setInt32(1, x);
   view.setInt32(5, y);
   view.setUint16(9, screenW);
   view.setUint16(11, screenH);
-
-  // hscroll Q15 conversion
-  let hscroll_norm = hscrollVal / 16;
-  hscroll_norm = Math.max(-1, Math.min(1, hscroll_norm));
-  let hscroll_q15 = Math.round(hscroll_norm * 32768);
-  if (hscroll_q15 < -32768) hscroll_q15 = -32768;
-  if (hscroll_q15 > 32767) hscroll_q15 = 32767;
-
-  // vscroll Q15 conversion
-  let vscroll_norm = vscrollVal / 16;
-  vscroll_norm = Math.max(-1, Math.min(1, vscroll_norm));
-  let vscroll_q15 = Math.round(vscroll_norm * 32768);
-  if (vscroll_q15 < -32768) vscroll_q15 = -32768;
-  if (vscroll_q15 > 32767) vscroll_q15 = 32767;
-
-  view.setInt16(13, hscroll_q15);
-  view.setInt16(15, vscroll_q15);
-
-  // buttons state
+  view.setInt16(13, encodeSignedFloat16(hscrollVal / 16));
+  view.setInt16(15, encodeSignedFloat16(vscrollVal / 16));
   view.setUint32(17, buttons);
-
   return buf;
 }
 
 function buildBackOrScreenOn(action) {
-  // scrcpy v1.25 BACK_OR_SCREEN_ON: 2 bytes total
   const buf = new ArrayBuffer(2);
   const view = new DataView(buf);
   view.setUint8(0, SCRCPY_CONTROL.TYPE_BACK_OR_SCREEN_ON);
-  view.setUint8(1, action);  // 0=DOWN, 1=UP
+  view.setUint8(1, action);
   return buf;
 }
 
 function buildKeyEventMessage(action, keycode, metaState = 0) {
-  // scrcpy v1.25 inject_keycode: 14 bytes total
   const buf = new ArrayBuffer(14);
   const view = new DataView(buf);
   view.setUint8(0, SCRCPY_CONTROL.TYPE_INJECT_KEYCODE);
-  view.setUint8(1, action);  // 0=DOWN, 1=UP
+  view.setUint8(1, action);
   view.setUint32(2, keycode);
-  view.setUint32(6, 0);   // repeat
-  view.setUint32(10, metaState);  // metaState
+  view.setUint32(6, 0);
+  view.setUint32(10, metaState);
   return buf;
 }
 
 function buildSetClipboardMessage(text, paste = true) {
-  // scrcpy v2+ CONTROL_MSG_TYPE_SET_CLIPBOARD:
-  // 1 byte (type=9) + 8 bytes (sequence=0) + 1 byte (paste) + 4 bytes (textLength) + text
   const encoder = new TextEncoder();
-  const textBytes = encoder.encode(text);
-  const len = textBytes.length;
-
-  const buf = new ArrayBuffer(14 + len);
+  const textBytes = encoder.encode(String(text ?? ""));
+  const buf = new ArrayBuffer(14 + textBytes.length);
   const view = new DataView(buf);
-
-  view.setUint8(0, 9); // CONTROL_MSG_TYPE_SET_CLIPBOARD = 9
-  
-  // Set sequence number to 0 (8 bytes: offset 1 to 8)
+  view.setUint8(0, 9);
   view.setUint32(1, 0);
   view.setUint32(5, 0);
-  
   view.setUint8(9, paste ? 1 : 0);
-  view.setUint32(10, len); // big-endian length
-
-  const uint8 = new Uint8Array(buf);
-  uint8.set(textBytes, 14);
+  view.setUint32(10, textBytes.length);
+  new Uint8Array(buf).set(textBytes, 14);
   return buf;
 }
 
-function sendTouch(action, x, y, pressure, buttons, action_button = 0) {
+function actionButtonForTouch(action, buttons) {
+  if (action === SCRCPY_CONTROL.ACTION_DOWN || action === SCRCPY_CONTROL.ACTION_UP) {
+    return buttons;
+  }
+  return 0;
+}
+
+function sendTouch(action, x, y, pressure, buttons, action_button = actionButtonForTouch(action, buttons)) {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
   const screenW = state.videoWidth;
   const screenH = state.videoHeight;
   if (!screenW || !screenH) return;
-  // Always use pointerId=0 for single-pointer mouse (same as ws-scrcpy)
-  const msg = buildTouchMessage(action, 0, x, y, screenW, screenH, pressure, buttons, action_button);
+  const px = clampNumber(x, 0, screenW - 1, screenW / 2);
+  const py = clampNumber(y, 0, screenH - 1, screenH / 2);
+  const buttonState = action === SCRCPY_CONTROL.ACTION_UP ? 0 : buttons;
+  const msg = buildTouchMessage(action, SCRCPY_CONTROL.POINTER_ID_MOUSE, px, py, screenW, screenH, pressure, buttonState, action_button);
   state.ws.send(msg);
 }
 
@@ -1085,16 +1141,22 @@ canvas.addEventListener("wheel", (event) => {
 $("connectBtn2").addEventListener("click", async () => {
   const ip = $("wirelessIp").value || "192.168.1.100";
   const port = $("wirelessPort").value || "5555";
+  const address = `${ip}:${port}`;
   const btn = $("connectBtn2");
   btn.disabled = true;
   btn.textContent = "Connecting...";
   try {
     const data = await api("/api/connect", {
       method: "POST",
-      body: JSON.stringify({ address: `${ip}:${port}` }),
+      body: JSON.stringify({ address }),
     });
     log(`Wireless connected: ${data.message}`);
-    await loadDevices();
+    await loadDevices(address);
+    const device = getDevice(address);
+    if (device?.state === "unauthorized") {
+      btn.textContent = "Authorizing...";
+      await tryAuthorizeDevice(address);
+    }
   } catch (error) {
     log(`Connection failed: ${error.message}`);
   } finally {
@@ -2143,7 +2205,13 @@ const agentState = {
   lastCapture: null,
 };
 
-function getAgentSystemPrompt(captureInfo) {
+const AGENT_STEP_BATCH = 30;
+const AGENT_PLAN_STEP_LIMIT = 6;
+const AGENT_DEFAULT_WAIT_MS = 2500;
+const AGENT_MIN_WAIT_MS = 500;
+const AGENT_MAX_WAIT_MS = 15000;
+
+function getAgentSystemPrompt(captureInfo, mode = "act") {
   const screenW = captureInfo?.imageW || state.videoWidth || 1080;
   const screenH = captureInfo?.imageH || state.videoHeight || 1920;
   const videoW = captureInfo?.videoW || state.videoWidth || screenW;
@@ -2154,12 +2222,29 @@ function getAgentSystemPrompt(captureInfo) {
     : "Keep the JSON thought field very brief, under 20 Chinese characters or 12 English words.";
   // Check for user-customized prompt
   const customPrompt = (localStorage.getItem("ai_system_prompt") || "").trim();
+  const planContract = mode === "plan"
+    ? `== DECISION MODE ==
+You may return either a high-level plan or one immediately executable action.
+
+Use a plan when the task needs multiple screens, app navigation, search/login/form steps, or user review before execution.
+Do not use a plan for simple one-step tasks such as pressing a visible button, going back/home, typing into an already focused field, waiting for loading, or tapping a clearly visible target.
+Plan format:
+{"thought":"...","action":"plan","steps":[{"desc":"open the target app"},{"desc":"search for the requested item"}]}
+Plan steps are goals only. Do NOT put coordinates, taps, swipes, or future-screen UI guesses inside plan steps.
+
+If the current screen already exposes a clear single next action, return that action instead of a plan.`
+    : `== ACTION MODE ==
+Return exactly one executable action for the current screenshot.
+Do not return a plan in this mode. Future-screen coordinates are invalid because the next screen is not visible yet.
+If the current plan step is already satisfied, return done with a short summary.`;
+
   if (customPrompt) {
     return `${customPrompt}
 
 You receive a downscaled screenshot of size ${screenW}x${screenH}. The live video is ${videoW}x${videoH}.
 Return coordinates in the screenshot coordinate system only: x in [0,${screenW - 1}], y in [0,${screenH - 1}].
 ${thoughtRule}
+${planContract}
 Respond with ONLY a valid JSON object, no markdown wrapping.`;
   }
 
@@ -2171,6 +2256,7 @@ IMPORTANT COORDINATE RULE:
 - Return coordinates in the screenshot image coordinate system only: x in [0,${screenW - 1}], y in [0,${screenH - 1}].
 - The app will convert your screenshot coordinates to the real device/video coordinates.
 - The screenshot has a labeled grid. Use the grid labels and choose the center of the visible UI element you want to press.
+- For small controls, tap the visual center of the target, not the edge, label baseline, or nearby grid overlay.
 - If you are unsure, prefer a "wait" or "fail" action instead of tapping a guessed location.
 
 == YOUR CAPABILITIES ==
@@ -2181,7 +2267,7 @@ You can interact with the phone in these ways:
 4. type — Input text into a focused text field. Use after tapping a text input to focus it.
 5. key — Press hardware/software keys: back, home, recent, power, enter, delete, tab, space.
 6. longpress — Press and hold a point. Use only for context menus or selecting text.
-7. wait — Do nothing, wait for screen to update (loading, animation, transition).
+7. wait — Do nothing, wait for screen to update (loading, animation, transition). Use duration_ms when the wait should be longer or shorter.
 
 == RESPONSE FORMAT ==
 You MUST respond with ONLY a valid JSON object (no markdown, no extra text):
@@ -2199,21 +2285,16 @@ Simple actions (execute immediately):
   longpress: {"thought":"长按文本区域","action":"longpress","x":360,"y":640,"duration_ms":800}
   key:     {"thought":"按返回键","action":"key","key":"back"}
   key:     {"thought":"打开最近任务","action":"key","key":"recent"}
-  wait:    {"thought":"等待页面加载","action":"wait","reason":"loading"}
+  wait:    {"thought":"等待页面加载","action":"wait","reason":"loading","duration_ms":3000}
 
 Terminal actions:
   done:    {"thought":"任务已完成","action":"done","summary":"成功打开设置"}
   fail:    {"thought":"无法完成任务","action":"fail","reason":"找不到目标元素"}
 
-== PLANNING RULE ==
-Do not use a "plan" action. Never return a list of future steps with coordinates.
-Future-screen coordinates are invalid because the next screen is not visible yet.
-For multi-step tasks, choose exactly one action for the current screenshot, then wait for the next observation.
+Planning action, only when ${mode === "plan" ? "Decision Mode asks for it" : "explicitly allowed by the caller"}:
+  plan:    {"thought":"需要先拆分任务","action":"plan","steps":[{"desc":"打开目标应用"},{"desc":"找到目标页面"}]}
 
-When to use simple actions directly:
-- Default behavior: choose exactly one next action based on the current screenshot
-- The target UI element is visible
-- You need to navigate through multiple screens: do one action, then wait for the next screenshot
+${planContract}
 
 == RULES ==
 - Always provide "thought" explaining your current screen analysis and plan
@@ -2223,10 +2304,11 @@ When to use simple actions directly:
 - The "type" action replaces the currently focused field using clipboard paste, so use it directly after focusing the input
 - Use "back" key to return to previous screen
 - Use "wait" when an action triggers loading or transition
+- For wait, set duration_ms between ${AGENT_MIN_WAIT_MS} and ${AGENT_MAX_WAIT_MS}; default is ${AGENT_DEFAULT_WAIT_MS}ms
 - If stuck after 2 attempts, use "fail"
 - When the task goal is clearly achieved, use "done"
-- You have up to 30 steps per batch. If you need more steps, use "need_more_steps" to request an extension from the user
-- For complex multi-step tasks, proceed step by step. Don't try to finish prematurely
+- For complex tasks, plan first when in Decision Mode, then execute one visible-screen action at a time
+- Never invent coordinates for screens you cannot currently see
 
 need_more_steps: {"thought":"任务还没完成，需要更多步骤","action":"need_more_steps","reason":"正在逐步完成复杂任务"}`;
 }
@@ -2353,7 +2435,73 @@ function drawTapIndicator(x, y) {
   setTimeout(() => { /* next frame will overwrite */ }, 800);
 }
 
-function buildAgentMessages(task, history, screenshotBase64) {
+function formatPlanForPrompt(planSteps = [], currentStepIndex = -1) {
+  if (!Array.isArray(planSteps) || planSteps.length === 0) return "";
+  return planSteps
+    .map((step, i) => {
+      const marker = i === currentStepIndex ? " <- current" : "";
+      return `${i + 1}. ${step.desc || String(step)}${marker}`;
+    })
+    .join("\n");
+}
+
+function formatAgentHistoryNote(entry) {
+  const action = entry?.action || {};
+  if (action.action === "wait" && Number.isFinite(Number(action.actual_wait_ms))) {
+    return ` The wait action requested ${action.requested_wait_ms || action.duration_ms || "unknown"}ms and actually waited ${action.actual_wait_ms}ms.`;
+  }
+  return "";
+}
+
+function buildAgentCurrentInstruction(task, options = {}) {
+  const mode = options.mode || "act";
+  const planText = formatPlanForPrompt(options.plan || [], options.currentStepIndex);
+
+  if (mode === "plan") {
+    return `Current task: "${task}"
+Here is the current screenshot.
+
+Decide whether this task needs a user-reviewable plan.
+- Return a plan if the task likely spans multiple screens or has multiple logical stages.
+- Return one executable current-screen action if the best next action is visible, obvious, or the task is simple.
+- Do not plan for single visible taps, back/home/recent, waiting, or typing into the current field.
+
+OUTPUT CONTRACT: Return ONLY one minified JSON object. No prose or markdown outside JSON.
+Allowed direct actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.
+Allowed planning action: plan.
+Plan example: {"thought":"任务需要多步导航","action":"plan","steps":[{"desc":"打开设置"},{"desc":"进入网络页面"},{"desc":"检查目标开关"}]}
+Direct action example: {"thought":"目标按钮已可见","action":"tap","x":360,"y":640}`;
+  }
+
+  if (mode === "plan_step") {
+    return `Current task: "${task}"
+Approved plan:
+${planText || "(none)"}
+
+Current plan step ${Number(options.currentStepIndex ?? 0) + 1}: "${options.currentStep?.desc || ""}"
+Here is the current screenshot.
+
+Return exactly one executable action for this current screen that advances or completes the current plan step.
+If this plan step is already complete on the current screen, return {"thought":"...","action":"done","summary":"step complete"}.
+Do not return plan or steps. Coordinates must be in this screenshot image's coordinate system.
+For loading or animation, return wait with duration_ms, for example {"thought":"等待加载","action":"wait","reason":"loading","duration_ms":3000}.
+
+OUTPUT CONTRACT: Return ONLY one minified JSON object. No prose or markdown outside JSON.
+Allowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.
+Example: {"thought":"点击当前可见按钮","action":"tap","x":360,"y":640}`;
+  }
+
+  return `Current task: "${task}"
+Here is the current screenshot. Return exactly one executable action for this current screen only.
+Do not return plan or steps. Coordinates must be reported in this screenshot image's coordinate system, not the full device resolution.
+
+OUTPUT CONTRACT: Return ONLY one minified JSON object. No analysis outside JSON. No prose outside JSON. No markdown. No text before or after the JSON.
+Allowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.
+For loading or animation, return wait with duration_ms, for example {"thought":"等待加载","action":"wait","reason":"loading","duration_ms":3000}.
+Example: {"thought":"brief current-screen reason","action":"swipe","x1":600,"y1":800,"x2":100,"y2":800,"duration_ms":300}`;
+}
+
+function buildAgentMessages(task, history, screenshotBase64, options = {}) {
   const messages = [];
   // Only keep last 2 history entries to avoid payload bloat
   const recent = history.slice(-2);
@@ -2361,7 +2509,7 @@ function buildAgentMessages(task, history, screenshotBase64) {
     messages.push({
       role: "user",
       content: [
-        { type: "text", text: `Step ${entry.step}: Here is the current screenshot.` },
+        { type: "text", text: `Step ${entry.step}: Screenshot before the recorded action.${formatAgentHistoryNote(entry)}` },
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${entry.screenshot}` } },
       ],
     });
@@ -2373,21 +2521,21 @@ function buildAgentMessages(task, history, screenshotBase64) {
   messages.push({
     role: "user",
     content: [
-      { type: "text", text: `Current task: "${task}"\nHere is the current screenshot. Return exactly one executable action for this current screen only. Do not return plan or steps. Coordinates must be reported in this screenshot image's coordinate system, not the full device resolution.\n\nOUTPUT CONTRACT: Return ONLY one minified JSON object. No analysis outside JSON. No prose outside JSON. No markdown. No text before or after the JSON.\nAllowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.\nExample: {"thought":"brief current-screen reason","action":"swipe","x1":600,"y1":800,"x2":100,"y2":800,"duration_ms":300}` },
+      { type: "text", text: buildAgentCurrentInstruction(task, options) },
       { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } },
     ],
   });
   return messages;
 }
 
-function buildAgentMessagesAnthropic(task, history, screenshotBase64) {
+function buildAgentMessagesAnthropic(task, history, screenshotBase64, options = {}) {
   const messages = [];
   const recent = history.slice(-2);
   for (const entry of recent) {
     messages.push({
       role: "user",
       content: [
-        { type: "text", text: `Step ${entry.step}: Here is the current screenshot.` },
+        { type: "text", text: `Step ${entry.step}: Screenshot before the recorded action.${formatAgentHistoryNote(entry)}` },
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: entry.screenshot } },
       ],
     });
@@ -2399,7 +2547,7 @@ function buildAgentMessagesAnthropic(task, history, screenshotBase64) {
   messages.push({
     role: "user",
     content: [
-      { type: "text", text: `Current task: "${task}"\nHere is the current screenshot. Return exactly one executable action for this current screen only. Do not return plan or steps. Coordinates must be reported in this screenshot image's coordinate system, not the full device resolution.\n\nOUTPUT CONTRACT: Return ONLY one minified JSON object. No analysis outside JSON. No prose outside JSON. No markdown. No text before or after the JSON.\nAllowed actions: tap, swipe, type, key, scroll, longpress, wait, done, fail.\nExample: {"thought":"brief current-screen reason","action":"swipe","x1":600,"y1":800,"x2":100,"y2":800,"duration_ms":300}` },
+      { type: "text", text: buildAgentCurrentInstruction(task, options) },
       { type: "image", source: { type: "base64", media_type: "image/jpeg", data: screenshotBase64 } },
     ],
   });
@@ -2569,7 +2717,7 @@ function parseLooseAgentAction(text) {
     if (match) action[field] = match[1];
   }
 
-  const numericFields = ["x", "y", "x1", "y1", "x2", "y2", "duration_ms"];
+  const numericFields = ["x", "y", "x1", "y1", "x2", "y2", "duration_ms", "duration", "seconds", "ms"];
   for (const field of numericFields) {
     const match = text.match(new RegExp(`"${field}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`));
     if (match) action[field] = Number(match[1]);
@@ -2634,6 +2782,218 @@ async function repairAgentActionWithAI(aiText, task, provider) {
   return parseAgentAction(repairedText);
 }
 
+async function repairAgentDecisionWithAI(aiText, task) {
+  const repairMessages = [{
+    role: "user",
+    content: `Convert this invalid planner response into exactly one minified JSON object. Do not add prose.
+Task: ${task}
+Allowed outputs:
+1. {"thought":"...","action":"plan","steps":[{"desc":"goal only"},{"desc":"goal only"}]}
+2. One current-screen action: tap, swipe, type, key, scroll, longpress, wait, done, fail.
+Plan steps must be high-level goals only; remove coordinates and future-screen gestures.
+Invalid response:
+${aiText.slice(0, 3000)}`,
+  }];
+  const repairPrompt = "You are a strict JSON formatter for an Android planning agent. Return only one valid JSON object.";
+  const repairedText = await callAgentAI(repairPrompt, repairMessages);
+  console.log(`[Agent] planner repair response (${repairedText.length} chars):`, repairedText.substring(0, 500));
+  return parseAgentAction(repairedText);
+}
+
+function normalizeAgentPlanSteps(steps) {
+  if (!Array.isArray(steps)) return [];
+  return steps
+    .map((step) => {
+      if (typeof step === "string") return { desc: step.trim() };
+      if (!step || typeof step !== "object") return null;
+      const desc = String(step.desc || step.goal || step.title || step.action || "").trim();
+      return desc ? { desc } : null;
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function buildAgentMessagesForProvider(provider, task, history, screenshotBase64, options = {}) {
+  const imageFormat = localStorage.getItem("ai_image_format") || "auto";
+  const useAnthropicFormat = imageFormat === "base64" || (imageFormat === "auto" && provider === "anthropic");
+  return useAnthropicFormat
+    ? buildAgentMessagesAnthropic(task, history, screenshotBase64, options)
+    : buildAgentMessages(task, history, screenshotBase64, options);
+}
+
+async function captureAgentObservation(statusText = "") {
+  const statusEl = $("agentStatus");
+  if (statusEl && statusText) statusEl.textContent = statusText;
+  const capture = captureFrameWithGrid();
+  if (!capture) throw new Error("failed to capture frame");
+  agentState.lastCapture = capture;
+  return capture;
+}
+
+async function requestAgentDecision(task, history, capture, options = {}) {
+  const provider = localStorage.getItem("ai_provider") || "openai";
+  const mode = options.mode || "act";
+  const systemPrompt = getAgentSystemPrompt(capture, mode);
+  console.log(`[Agent] ${mode} system prompt (${systemPrompt.length} chars):`, systemPrompt.substring(0, 300) + "...");
+  const messages = buildAgentMessagesForProvider(provider, task, history, capture.base64, options);
+
+  let aiText;
+  try {
+    aiText = await callAgentAI(systemPrompt, messages);
+  } catch (err) {
+    throw new Error(`AI error: ${err.message}`);
+  }
+  aiText = String(aiText || "");
+
+  console.log(`[Agent] ${mode} AI response (${aiText.length} chars):`, aiText.substring(0, 500));
+  if (isAgentThinkingEnabled() && aiText && !aiText.trim().startsWith("{")) {
+    addAgentThought(options.stepNumber || "?", "模型原始输出", aiText.slice(0, 1200));
+  }
+
+  if (!aiText || !aiText.trim()) {
+    const wasStream = localStorage.getItem("ai_streaming") === "true";
+    console.warn(`[Agent] ${mode} got empty response (stream=${wasStream}), retrying...`);
+    await new Promise(r => setTimeout(r, 1200));
+    try {
+      if (wasStream) {
+        localStorage.setItem("ai_streaming", "false");
+        aiText = await callAgentAI(systemPrompt, messages);
+        localStorage.setItem("ai_streaming", "true");
+      } else {
+        aiText = await callAgentAI(systemPrompt, messages);
+      }
+    } catch (err) {
+      if (wasStream) localStorage.setItem("ai_streaming", "true");
+      throw new Error(`AI retry error: ${err.message}`);
+    }
+    if (!aiText || !aiText.trim()) throw new Error("AI returned empty response");
+  }
+
+  let action;
+  try {
+    action = parseAgentAction(aiText);
+  } catch (err) {
+    if (mode === "plan") {
+      log("Agent: planner returned non-JSON, trying format repair...");
+      try {
+        action = await repairAgentDecisionWithAI(aiText, task);
+      } catch (repairErr) {
+        throw new Error(`failed to parse planner response: ${aiText.substring(0, 200)}`);
+      }
+    } else {
+      log("Agent: AI returned non-JSON, trying format repair...");
+      addAgentThought(options.stepNumber || "?", "格式修正", "模型没有返回可执行 JSON，正在请求它压缩成一个当前屏幕动作。");
+      try {
+        action = await repairAgentActionWithAI(aiText, task, provider);
+      } catch (repairErr) {
+        const inferred = inferActionFromText(aiText);
+        if (!inferred) throw new Error(`failed to parse AI response: ${aiText.substring(0, 200)}`);
+        log(`Agent: inferred fallback action "${inferred.action}" from non-JSON response`);
+        action = inferred;
+      }
+    }
+  }
+
+  if (action.action === "plan") {
+    action.steps = normalizeAgentPlanSteps(action.steps);
+    action.desc = action.desc || `${action.steps.length} steps`;
+  }
+  console.log(`[Agent] ${mode} parsed action:`, JSON.stringify(action));
+  return action;
+}
+
+async function askForMoreAgentSteps(currentMax) {
+  log(`Agent: reached ${currentMax} steps, asking user for more...`);
+  const statusEl = $("agentStatus");
+  if (statusEl) statusEl.textContent = "等待用户确认...";
+  return new Promise(resolve => {
+    setTimeout(() => resolve(confirm(`Agent 已执行 ${currentMax} 步，任务尚未完成。\n\n是否继续执行更多步骤？`)), 50);
+  });
+}
+
+async function runAgentActionStep(task, history, counters, options = {}) {
+  if (counters.step >= counters.maxSteps) {
+    const more = await askForMoreAgentSteps(counters.maxSteps);
+    if (more && agentState.running) {
+      counters.maxSteps += AGENT_STEP_BATCH;
+      log(`Agent: user approved, extending to ${counters.maxSteps} steps`);
+    } else {
+      log(`Agent: user declined or stopped at ${counters.maxSteps} steps`);
+      return "stop";
+    }
+  }
+
+  counters.step++;
+  const statusText = options.statusText || `Step ${counters.step}/${counters.maxSteps}...`;
+  const capture = await captureAgentObservation(statusText);
+  const action = await requestAgentDecision(task, history, capture, {
+    ...options,
+    mode: options.mode || "act",
+    stepNumber: counters.step,
+  });
+  if (action.action === "wait") {
+    action.duration_ms = getAgentWaitMs(action);
+  }
+
+  addAgentThought(counters.step, "动作理由", action.thought || action.reason || action.summary || "");
+  addAgentLog(counters.step, action.thought, action, capture.base64);
+
+  if (action.action === "done") {
+    log(`Agent: ${options.mode === "plan_step" ? "plan step completed" : "task completed"} — ${action.summary || ""}`);
+    history.push({ step: counters.step, screenshot: capture.base64, action });
+    return "done";
+  }
+  if (action.action === "fail") {
+    log(`Agent: ${options.mode === "plan_step" ? "plan step failed" : "task failed"} — ${action.reason || ""}`);
+    history.push({ step: counters.step, screenshot: capture.base64, action });
+    return "fail";
+  }
+  if (action.action === "need_more_steps") {
+    log(`Agent: requesting more steps — ${action.reason || ""}`);
+    const more = confirm(`Agent 请求更多步骤：${action.reason || "任务尚未完成"}\n\n是否批准？`);
+    if (more && agentState.running) {
+      counters.maxSteps += AGENT_STEP_BATCH;
+      log(`Agent: user approved, extending to ${counters.maxSteps} steps`);
+      history.push({ step: counters.step, screenshot: capture.base64, action });
+      return "continue";
+    }
+    log("Agent: user declined, stopping");
+    return "stop";
+  }
+  if (action.action === "plan") {
+    if ((options.mode || "act") !== "plan_step" && action.steps.length > 0) {
+      log(`Agent: proposed ${action.steps.length} plan steps during execution`);
+      const approvedSteps = await showPlanPanel(action.steps, action.thought);
+      if (!approvedSteps || approvedSteps.length === 0) {
+        log("Agent: plan cancelled");
+        return "stop";
+      }
+      const normalizedSteps = normalizeAgentPlanSteps(approvedSteps);
+      const planResult = await executePlan(task, normalizedSteps, history, counters);
+      return planResult === "fail" || planResult === "stop" ? planResult : "continue";
+    }
+
+    log("Agent: nested plan ignored inside a plan step; requesting a current-screen action next");
+    history.push({
+      step: counters.step,
+      screenshot: capture.base64,
+      action: { action: "wait", reason: "Nested plan returned inside a plan step; re-observe current screen." },
+    });
+    await agentSleep(500);
+    return "continue";
+  }
+
+  let executionResult = {};
+  try {
+    executionResult = await executeAgentAction(action) || {};
+  } catch (err) {
+    log(`Agent: action execution error: ${err.message}`);
+  }
+  history.push({ step: counters.step, screenshot: capture.base64, action: actionWithExecutionResult(action, executionResult) });
+  await agentSleep(1000);
+  return "continue";
+}
+
 function addAgentLog(step, thought, action, screenshotBase64) {
   const logEl = $("agentLog");
   if (!logEl) return;
@@ -2659,7 +3019,7 @@ function addAgentLog(step, thought, action, screenshotBase64) {
   else if (action.action === "key") actionDesc = `key [${action.key}]`;
   else if (action.action === "scroll") actionDesc = `scroll ${action.direction} at (${action.x},${action.y})`;
   else if (action.action === "longpress") actionDesc = `longpress (${action.x}, ${action.y})`;
-  else if (action.action === "wait") actionDesc = `wait: ${action.reason || ""}`;
+  else if (action.action === "wait") actionDesc = `wait ${action.duration_ms || action.requested_wait_ms || AGENT_DEFAULT_WAIT_MS}ms: ${action.reason || ""}`;
   else if (action.action === "done") actionDesc = `done: ${action.summary || ""}`;
   else if (action.action === "need_more_steps") actionDesc = `need_more_steps: ${action.reason || ""}`;
   else if (action.action === "fail") actionDesc = `fail: ${action.reason || ""}`;
@@ -2731,6 +3091,33 @@ function clampNumber(value, min, max, fallback = min) {
   return Math.round(Math.max(min, Math.min(max, num)));
 }
 
+function getAgentWaitMs(action = {}) {
+  const raw = action.duration_ms ?? action.ms ?? action.duration;
+  let waitMs = Number(raw);
+  if (!Number.isFinite(waitMs) && Number.isFinite(Number(action.seconds))) {
+    waitMs = Number(action.seconds) * 1000;
+  }
+  if (!Number.isFinite(waitMs) || waitMs <= 0) waitMs = AGENT_DEFAULT_WAIT_MS;
+  return clampNumber(waitMs, AGENT_MIN_WAIT_MS, AGENT_MAX_WAIT_MS, AGENT_DEFAULT_WAIT_MS);
+}
+
+async function agentSleep(ms) {
+  const startedAt = performance.now();
+  const deadline = startedAt + ms;
+  while (agentState.running && performance.now() < deadline) {
+    await new Promise((r) => setTimeout(r, Math.min(100, deadline - performance.now())));
+  }
+  return Math.round(performance.now() - startedAt);
+}
+
+function actionWithExecutionResult(action, result = {}) {
+  if (!result || Object.keys(result).length === 0) return action;
+  return {
+    ...action,
+    ...result,
+  };
+}
+
 function agentPointToVideo(x, y, captureInfo = agentState.lastCapture) {
   const videoW = captureInfo?.videoW || state.videoWidth || 1080;
   const videoH = captureInfo?.videoH || state.videoHeight || 1920;
@@ -2796,12 +3183,12 @@ async function performVideoSwipe(start, end, durationMs = 320) {
     const steps = 12;
     const stepDelay = durationMs / steps;
     for (let i = 1; i <= steps; i++) {
-      await new Promise((r) => setTimeout(r, stepDelay));
+    await agentSleep(stepDelay);
       const cx = Math.round(start.x + (end.x - start.x) * (i / steps));
       const cy = Math.round(start.y + (end.y - start.y) * (i / steps));
       sendTouch(SCRCPY_CONTROL.ACTION_MOVE, cx, cy, SCRCPY_CONTROL.MAX_PRESSURE, SCRCPY_CONTROL.BUTTON_PRIMARY);
     }
-    await new Promise((r) => setTimeout(r, 60));
+    await agentSleep(60);
     sendTouch(SCRCPY_CONTROL.ACTION_UP, end.x, end.y, 0, SCRCPY_CONTROL.BUTTON_PRIMARY);
   } else {
     const nativeStart = videoPointToNative(start.x, start.y, start.videoW, start.videoH);
@@ -2866,7 +3253,7 @@ async function executeAgentAction(action) {
         console.log(`[Agent] WS not open, adb tap(${native.x}, ${native.y})`);
         await sendTap(native);
       }
-      await new Promise((r) => setTimeout(r, 500));
+      await agentSleep(500);
       break;
     }
     case "swipe": {
@@ -2874,7 +3261,7 @@ async function executeAgentAction(action) {
       const end = agentPointToVideo(action.x2, action.y2, captureInfo);
       log(`Agent swipe: image(${start.imageX},${start.imageY})→(${end.imageX},${end.imageY}) video(${start.x},${start.y})→(${end.x},${end.y})`);
       await performVideoSwipe(start, end, action.duration_ms || 300);
-      await new Promise((r) => setTimeout(r, 500));
+      await agentSleep(500);
       break;
     }
     case "longpress": {
@@ -2889,12 +3276,12 @@ async function executeAgentAction(action) {
         const native = videoPointToNative(pt.x, pt.y, pt.videoW, pt.videoH);
         await sendSwipe(native, native, duration);
       }
-      await new Promise((r) => setTimeout(r, 500));
+      await agentSleep(500);
       break;
     }
     case "type": {
       await replaceFocusedText(action.text);
-      await new Promise((r) => setTimeout(r, 500));
+      await agentSleep(500);
       break;
     }
     case "key": {
@@ -2912,7 +3299,7 @@ async function executeAgentAction(action) {
       };
       const keycode = keyMap[(action.key || "").toLowerCase()] || action.key;
       await sendKeyPress(keycode);
-      await new Promise((r) => setTimeout(r, 300));
+      await agentSleep(300);
       break;
     }
     case "scroll": {
@@ -2945,18 +3332,30 @@ async function executeAgentAction(action) {
 
       log(`Agent scroll ${dir}: swipe video(${start.x},${start.y})→(${end.x},${end.y})`);
       await performVideoSwipe(start, end, action.duration_ms || 420);
-      await new Promise((r) => setTimeout(r, 700));
+      await agentSleep(700);
       break;
     }
-    case "wait":
-      await new Promise((r) => setTimeout(r, 1500));
-      break;
+    case "wait": {
+      const requestedWaitMs = getAgentWaitMs(action);
+      const startedAt = new Date();
+      log(`Agent wait: ${requestedWaitMs}ms${action.reason ? ` (${action.reason})` : ""}`);
+      const actualWaitMs = await agentSleep(requestedWaitMs);
+      const endedAt = new Date();
+      log(`Agent wait finished: ${actualWaitMs}ms`);
+      return {
+        requested_wait_ms: requestedWaitMs,
+        actual_wait_ms: actualWaitMs,
+        wait_started_at: startedAt.toISOString(),
+        wait_ended_at: endedAt.toISOString(),
+      };
+    }
     case "done":
     case "fail":
       break;
     case "need_more_steps":
       break;
   }
+  return {};
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2971,6 +3370,14 @@ function showPlanPanel(steps, thought) {
     const panel = $("planPanel");
     const thoughtEl = $("planThought");
     const stepsEl = $("planSteps");
+    const statusEl = $("agentStatus");
+    if (!panel || !thoughtEl || !stepsEl) {
+      log("Agent: plan panel DOM is missing");
+      planResolve = null;
+      resolve(null);
+      return;
+    }
+    if (statusEl) statusEl.textContent = "Plan review";
 
     // Show thought
     thoughtEl.textContent = thought || "Execution plan";
@@ -2978,14 +3385,24 @@ function showPlanPanel(steps, thought) {
     // Render steps
     renderPlanSteps(steps);
 
-    // Show panel with animation
+    // Show panel with animation. Fixed positioning keeps it visible even when
+    // the stream container is transformed or clipped.
+    panel.style.position = "fixed";
+    panel.style.top = "92px";
+    panel.style.right = "24px";
+    panel.style.width = "360px";
+    panel.style.maxWidth = "calc(100vw - 48px)";
+    panel.style.maxHeight = "calc(100vh - 116px)";
+    panel.style.zIndex = "1200";
+    panel.style.pointerEvents = "auto";
+    panel.style.visibility = "visible";
     panel.style.display = "flex";
     panel.style.opacity = "0";
-    panel.style.transform = "translateX(20px)";
+    panel.style.transform = "translateY(-8px)";
     requestAnimationFrame(() => {
-      panel.style.transition = "opacity 0.35s ease, transform 0.35s cubic-bezier(0.4,0,0.2,1)";
+      panel.style.transition = "opacity 0.22s ease, transform 0.22s cubic-bezier(0.4,0,0.2,1)";
       panel.style.opacity = "1";
-      panel.style.transform = "translateX(0)";
+      panel.style.transform = "translateY(0)";
     });
 
     // Animate canvas to the left
@@ -3011,7 +3428,7 @@ function renderPlanSteps(steps) {
     div.innerHTML = `
       <span class="step-num">${i + 1}</span>
       <textarea class="step-desc" rows="1" spellcheck="false">${escapeHtml(step.desc || "")}</textarea>
-      <span class="step-action-tag">${step.action || "?"}</span>
+      <span class="step-action-tag">goal</span>
       <button class="step-delete" title="Delete step">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
@@ -3044,11 +3461,13 @@ function renderPlanSteps(steps) {
 
 function hidePlanPanel() {
   const panel = $("planPanel");
+  if (!panel) return;
   panel.style.transition = "opacity 0.25s ease, transform 0.25s ease";
   panel.style.opacity = "0";
-  panel.style.transform = "translateX(20px)";
+  panel.style.transform = "translateY(-8px)";
   setTimeout(() => {
     panel.style.display = "none";
+    panel.style.visibility = "hidden";
   }, 260);
 
   // Restore canvas position
@@ -3084,7 +3503,7 @@ function getPlanSteps() {
   return steps;
 }
 
-async function executePlan(steps, history) {
+async function executePlan(task, steps, history, counters) {
   for (let i = 0; i < steps.length; i++) {
     if (!agentState.running) break;
 
@@ -3100,26 +3519,33 @@ async function executePlan(steps, history) {
     const step = steps[i];
     log(`Agent plan step ${i + 1}/${steps.length}: ${step.desc}`);
 
-    // Capture frame before action (scaled JPEG, same as agent loop)
-    const capture = captureFrameWithGrid();
-    if (capture) agentState.lastCapture = capture;
-    addAgentLog(i + 1, step.desc, step, capture?.base64);
+    let stepDone = false;
+    for (let attempt = 1; attempt <= AGENT_PLAN_STEP_LIMIT && agentState.running; attempt++) {
+      const result = await runAgentActionStep(task, history, counters, {
+        mode: "plan_step",
+        plan: steps,
+        currentStep: step,
+        currentStepIndex: i,
+        statusText: `Plan ${i + 1}/${steps.length}, try ${attempt}/${AGENT_PLAN_STEP_LIMIT}...`,
+      });
 
-    // Execute the action
-    try {
-      await executeAgentAction(step);
-    } catch (err) {
-      log(`Agent plan step ${i + 1} error: ${err.message}`);
+      if (result === "done") {
+        stepDone = true;
+        break;
+      }
+      if (result === "fail" || result === "stop") {
+        return result;
+      }
     }
 
-    // Record in history
-    if (capture) {
-      history.push({ step: i + 1, screenshot: capture.base64, action: step });
+    if (!stepDone) {
+      log(`Agent: plan step ${i + 1} reached retry limit, moving to next step`);
     }
 
-    // Wait for screen to update
-    await new Promise((r) => setTimeout(r, 800));
+    await agentSleep(800);
   }
+
+  return "done";
 }
 
 // Plan panel button handlers
@@ -3154,7 +3580,7 @@ $("planCloseBtn").addEventListener("click", () => {
 $("planAddStepBtn").addEventListener("click", () => {
   const stepsEl = $("planSteps");
   const steps = stepsEl._steps || [];
-  steps.push({ desc: "New step", action: "tap", x: 0, y: 0 });
+  steps.push({ desc: "New step" });
   renderPlanSteps(steps);
   // Focus the new step's textarea
   const newTextareas = stepsEl.querySelectorAll(".step-desc");
@@ -3173,7 +3599,6 @@ async function agentLoop(task) {
     return;
   }
 
-  const provider = localStorage.getItem("ai_provider") || "openai";
   const api_key = localStorage.getItem("ai_key") || "";
   if (!api_key) {
     log("Agent: API Key not configured / 请先配置 AI API Key");
@@ -3193,10 +3618,8 @@ async function agentLoop(task) {
   clearAgentThoughts();
   setAgentThoughtPanelVisible(isAgentThinkingEnabled());
 
-  const STEP_BATCH = 30;
-  let maxSteps = STEP_BATCH;
   const history = [];
-  let step = 0;
+  const counters = { step: 0, maxSteps: AGENT_STEP_BATCH };
 
   log(`Agent started: "${task}"`);
 
@@ -3208,161 +3631,71 @@ async function agentLoop(task) {
   }
 
   try {
-    while (agentState.running) {
-      // Check if we need more steps
-      if (step >= maxSteps) {
-        log(`Agent: reached ${maxSteps} steps, asking user for more...`);
-        if (statusEl) statusEl.textContent = `等待用户确认...`;
-        const more = await new Promise(resolve => {
-          setTimeout(() => resolve(confirm(`Agent 已执行 ${maxSteps} 步，任务尚未完成。\n\n是否继续执行更多步骤？`)), 50);
-        });
-        if (more && agentState.running) {
-          maxSteps += STEP_BATCH;
-          log(`Agent: user approved, extending to ${maxSteps} steps`);
-        } else {
-          log(`Agent: user declined or stopped at ${maxSteps} steps`);
-          break;
-        }
+    const firstCapture = await captureAgentObservation("Planning...");
+    const firstDecision = await requestAgentDecision(task, history, firstCapture, {
+      mode: "plan",
+      stepNumber: "plan",
+    });
+    addAgentThought("plan", "初始决策", firstDecision.thought || firstDecision.reason || firstDecision.summary || "");
+
+    if (firstDecision.action === "plan" && firstDecision.steps.length > 0) {
+      addAgentLog("plan", firstDecision.thought, firstDecision, firstCapture.base64);
+      log(`Agent: proposed ${firstDecision.steps.length} plan steps`);
+      const approvedSteps = await showPlanPanel(firstDecision.steps, firstDecision.thought);
+      if (!approvedSteps || approvedSteps.length === 0) {
+        log("Agent: plan cancelled");
+        return;
       }
-
-      step++;
-      if (statusEl) statusEl.textContent = `Step ${step}/${maxSteps}...`;
-
-      // 1. Capture frame with coordinate grid for AI
-      const capture = captureFrameWithGrid();
-      if (!capture) {
-        log("Agent: failed to capture frame");
-        break;
+      const normalizedSteps = normalizeAgentPlanSteps(approvedSteps);
+      log(`Agent: executing approved plan with ${normalizedSteps.length} steps`);
+      const planResult = await executePlan(task, normalizedSteps, history, counters);
+      if (planResult === "fail" || planResult === "stop") return;
+      log("Agent: approved plan finished, verifying final state");
+    } else if (firstDecision.action === "plan") {
+      log("Agent: planner returned an empty plan, falling back to current-screen actions");
+      history.push({
+        step: 0,
+        screenshot: firstCapture.base64,
+        action: { action: "wait", reason: "Planner returned an empty plan." },
+      });
+    } else {
+      if (firstDecision.action === "wait") {
+        firstDecision.duration_ms = getAgentWaitMs(firstDecision);
       }
-      agentState.lastCapture = capture;
+      addAgentLog(1, firstDecision.thought, firstDecision, firstCapture.base64);
+      counters.step = 1;
 
-      // 2. Build messages and call AI
-      const systemPrompt = getAgentSystemPrompt(capture);
-      console.log(`[Agent] system prompt (${systemPrompt.length} chars):`, systemPrompt.substring(0, 300) + "...");
-      const imageFormat = localStorage.getItem("ai_image_format") || "auto";
-      const useAnthropicFormat = imageFormat === "base64" || (imageFormat === "auto" && provider === "anthropic");
-      const messages = useAnthropicFormat
-        ? buildAgentMessagesAnthropic(task, history, capture.base64)
-        : buildAgentMessages(task, history, capture.base64);
-
-      let aiText;
-      try {
-        aiText = await callAgentAI(systemPrompt, messages);
-      } catch (err) {
-        log(`Agent AI error: ${err.message}`);
-        break;
+      if (firstDecision.action === "done") {
+        history.push({ step: 1, screenshot: firstCapture.base64, action: firstDecision });
+        log(`Agent: task completed — ${firstDecision.summary || ""}`);
+        return;
       }
-      console.log(`[Agent] step ${step} AI response (${aiText.length} chars):`, aiText.substring(0, 500));
-      if (isAgentThinkingEnabled() && aiText && !aiText.trim().startsWith("{")) {
-        addAgentThought(step, "模型原始输出", aiText.slice(0, 1200));
+      if (firstDecision.action === "fail") {
+        history.push({ step: 1, screenshot: firstCapture.base64, action: firstDecision });
+        log(`Agent: task failed — ${firstDecision.reason || ""}`);
+        return;
       }
-
-      // Retry if empty response — try non-streaming fallback
-      if (!aiText || !aiText.trim()) {
-        const wasStream = localStorage.getItem("ai_streaming") === "true";
-        console.warn(`[Agent] step ${step} got empty response (stream=${wasStream}), retrying...`);
-        await new Promise(r => setTimeout(r, 2000));
+      if (firstDecision.action === "need_more_steps") {
+        history.push({ step: 1, screenshot: firstCapture.base64, action: firstDecision });
+        log(`Agent: requesting more steps — ${firstDecision.reason || ""}`);
+      } else {
+        let executionResult = {};
         try {
-          if (wasStream) {
-            // Fallback: temporarily disable streaming for retry
-            localStorage.setItem("ai_streaming", "false");
-            aiText = await callAgentAI(systemPrompt, messages);
-            localStorage.setItem("ai_streaming", "true");
-            console.log(`[Agent] step ${step} non-streaming fallback: ${aiText.length} chars`);
-          } else {
-            aiText = await callAgentAI(systemPrompt, messages);
-          }
+          executionResult = await executeAgentAction(firstDecision) || {};
         } catch (err) {
-          if (wasStream) localStorage.setItem("ai_streaming", "true");
-          log(`Agent AI retry error: ${err.message}`);
-          break;
+          log(`Agent: action execution error: ${err.message}`);
         }
-        console.log(`[Agent] step ${step} retry response (${aiText.length} chars):`, aiText.substring(0, 500));
-        if (!aiText || !aiText.trim()) {
-          log(`Agent: AI returned empty response on step ${step}, stopping`);
-          break;
-        }
+        history.push({ step: 1, screenshot: firstCapture.base64, action: actionWithExecutionResult(firstDecision, executionResult) });
+        await agentSleep(1000);
       }
-
-      // 3. Parse action
-      let action;
-      try {
-        action = parseAgentAction(aiText);
-      } catch (err) {
-        log("Agent: AI returned non-JSON, trying format repair...");
-        addAgentThought(step, "格式修正", "模型没有返回可执行 JSON，正在请求它压缩成一个当前屏幕动作。");
-        try {
-          action = await repairAgentActionWithAI(aiText, task, provider);
-        } catch (repairErr) {
-          const inferred = inferActionFromText(aiText);
-          if (inferred) {
-            log(`Agent: inferred fallback action "${inferred.action}" from non-JSON response`);
-            action = inferred;
-          } else {
-            log(`Agent: failed to parse AI response: ${aiText.substring(0, 200)}`);
-            break;
-          }
-        }
-      }
-      console.log(`[Agent] step ${step} parsed action:`, JSON.stringify(action));
-      addAgentThought(step, "动作理由", action.thought || action.reason || action.summary || "");
-
-      // 4. Log
-      addAgentLog(step, action.thought, action, capture.base64);
-
-      // 5. Check terminal states
-      if (action.action === "done") {
-        log(`Agent: task completed — ${action.summary || ""}`);
-        break;
-      }
-      if (action.action === "fail") {
-        log(`Agent: task failed — ${action.reason || ""}`);
-        break;
-      }
-      if (action.action === "need_more_steps") {
-        log(`Agent: requesting more steps — ${action.reason || ""}`);
-        const more = confirm(`Agent 请求更多步骤：${action.reason || "任务尚未完成"}\n\n是否批准？`);
-        if (more && agentState.running) {
-          maxSteps += STEP_BATCH;
-          log(`Agent: user approved, extending to ${maxSteps} steps`);
-        } else {
-          log(`Agent: user declined, stopping`);
-          break;
-        }
-      }
-
-      // 5b. Plan actions are intentionally not executed. Coordinates for
-      // future screens are guesses, so continue with a fresh observation.
-      if (action.action === "plan" && Array.isArray(action.steps) && action.steps.length > 0) {
-        log(`Agent: ignored plan with ${action.steps.length} future steps; requesting a current-screen action`);
-        addAgentLog(step, action.thought, { action: "plan", desc: `${action.steps.length} steps` }, capture.base64);
-        history.push({
-          step,
-          screenshot: capture.base64,
-          action: {
-            action: "wait",
-            reason: "Model returned a plan; the app ignored it because only current-screen actions are executable.",
-          },
-        });
-        await new Promise((r) => setTimeout(r, 500));
-        continue;
-      }
-
-      // 6. Execute action
-      try {
-        await executeAgentAction(action);
-      } catch (err) {
-        log(`Agent: action execution error: ${err.message}`);
-      }
-
-      // 7. Record history
-      history.push({ step, screenshot: capture.base64, action });
-
-      // 8. Wait for screen to update
-      await new Promise((r) => setTimeout(r, 1000));
     }
 
-    // Step limit handled inside the loop
+    while (agentState.running) {
+      const result = await runAgentActionStep(task, history, counters, { mode: "act" });
+      if (result === "done" || result === "fail" || result === "stop") break;
+    }
+  } catch (err) {
+    log(`Agent: ${err.message}`);
   } finally {
     agentState.running = false;
     agentState.abortController = null;

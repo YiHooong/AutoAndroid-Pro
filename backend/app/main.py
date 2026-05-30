@@ -102,6 +102,37 @@ def devices():
         return {"devices": [device.__dict__ for device in adb.list_devices()]}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/devices/{serial}/authorize")
+def authorize_device(serial: str):
+    """Try to re-trigger ADB authorization for an unauthorized device.
+
+    ADB authorization cannot be bypassed server-side. For TCP devices, the best
+    practical recovery is to disconnect and reconnect so Android may show the
+    authorization dialog again. For USB/local transports, ask adb to reconnect
+    the device transport.
+    """
+    messages: list[str] = []
+    try:
+        if ":" in serial:
+            with contextlib.suppress(Exception):
+                messages.append(adb.disconnect(serial))
+            messages.append(adb.connect(serial))
+        else:
+            messages.append(adb.run_adb(["reconnect", "device"], serial=serial, timeout=10).strip())
+
+        refreshed = [device for device in adb.list_devices() if device.serial == serial]
+        device = refreshed[0].__dict__ if refreshed else None
+        return {
+            "ok": bool(device and device.get("state") == "device"),
+            "message": "\n".join(message for message in messages if message),
+            "device": device,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/devices/{serial}/screenshot")
 def capture_screenshot(serial: str):
     """Capture a screenshot from the device using adb exec-out screencap -p."""
